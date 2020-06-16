@@ -1,5 +1,18 @@
 #include "node.h"
+#include <algorithm>
 #include <cmath>
+
+Node *Node::Reduce()
+{
+    Node *prev = this;
+    Node *next = nullptr;
+    while (prev != next)
+    {
+        next = prev->Simplify();
+        prev = next;
+    }
+    return prev;
+}
 
 Num::Num(double _val)
 {
@@ -10,16 +23,11 @@ Num::Num(double _val)
         val = _val;
 }
 
-std::string Num::Print()
+std::string Num::ToString()
 {
     if (fabs(val - (int)val) < 1e-14)
         return std::to_string((int)val);
     return std::to_string(val);
-}
-
-Node *Num::Differentiate()
-{
-    return new Num(0);
 }
 
 Node *Num::Simplify()
@@ -33,14 +41,9 @@ Var::Var(std::string _id)
     id = _id;
 }
 
-std::string Var::Print()
+std::string Var::ToString()
 {
     return id;
-}
-
-Node *Var::Differentiate()
-{
-    return new Num(1);
 }
 
 Node *Var::Simplify()
@@ -55,7 +58,7 @@ Unary::Unary(Node *_arg, Token _op)
     op = _op;
 }
 
-std::string Unary::Print()
+std::string Unary::ToString()
 {
     std::string s = "";
     if (op == Token::ADD)
@@ -73,27 +76,8 @@ std::string Unary::Print()
     else if (op == Token::TAN)
         s += "tan";
 
-    s += arg->Print();
+    s += arg->ToString();
     return s;
-}
-
-Node *Unary::Differentiate()
-{
-    if (op == Token::ADD)
-        return arg->Differentiate();
-    else if (op == Token::SUB)
-        return new Unary(arg->Differentiate(), Token::SUB);
-    else if (op == Token::LN)
-        return new BinaryNode(arg->Differentiate(), arg, Token::DIV);
-    else if (op == Token::EXP)
-        return new BinaryNode(arg->Differentiate(), new Unary(arg, Token::EXP), Token::MUL);
-    else if (op == Token::SIN)
-        return new BinaryNode(arg->Differentiate(), new Unary(arg, Token::COS), Token::MUL);
-    else if (op == Token::COS)
-        return new BinaryNode(arg->Differentiate(), new Unary(new Unary(arg, Token::SIN), Token::SUB), Token::MUL);
-    else if (op == Token::TAN)
-        return new BinaryNode(arg->Differentiate(), new BinaryNode(new Unary(arg, Token::COS), new Num(-2), Token::POW), Token::MUL);
-    return new Num(0);
 }
 
 Node *Unary::BaseArg()
@@ -137,7 +121,7 @@ Node *Unary::SimplifyNegations()
     if (parity % 2 == 0)
         return BaseArg();
     else
-        return new Unary(BaseArg(), Token::SUB);
+        return new Multi(new Num(-1), BaseArg(), Token::MUL);
     return this;
 }
 
@@ -160,122 +144,101 @@ Node *Unary::Simplify()
     return SimplifyNegations();
 }
 
-BinaryNode::BinaryNode(Node *_lhs, Node *_rhs, Token _op)
+Multi::Multi(Token _op)
 {
-    type = NodeType::Binary;
-    lhs = _lhs;
-    rhs = _rhs;
     op = _op;
+    type = NodeType::Multi;
+}
+Multi::Multi(Node *arg, Token _op)
+{
+    op = _op;
+    type = NodeType::Multi;
+    args.emplace_back(arg);
 }
 
-std::string BinaryNode::Print()
+Multi::Multi(Node *_lhs, Node *_rhs, Token _op)
+{
+    op = _op;
+    type = NodeType::Multi;
+    args.emplace_back(_lhs);
+    args.emplace_back(_rhs);
+}
+
+void Multi::AddArg(Node *a)
+{
+    args.emplace_back(a);
+}
+
+std::string Multi::ToString()
 {
     std::string s = "(";
-    s += lhs->Print() + " ";
-    if (op == Token::ADD)
-        s += "+";
-    else if (op == Token::SUB)
-        s += "-";
-    else if (op == Token::MUL)
-        s += "*";
-    else if (op == Token::DIV)
-        s += "/";
-    else if (op == Token::POW)
-        s += "^";
-    else if (op == Token::OP)
-        s += "(";
-    else if (op == Token::CP)
-        s += ")";
-    // else
-    //     s += std::to_string(op);
-
-    s += " " + rhs->Print() + ")";
-
+    for (long unsigned int i = 0; i < args.size(); ++i)
+    {
+        if (i != 0)
+        {
+            if (op == Token::ADD)
+                s += " + ";
+            else if (op == Token::MUL)
+                s += " * ";
+            else if (op == Token::DIV)
+                s += " / ";
+            else if (op == Token::POW)
+                s += " ^ ";
+        }
+        s += args[i]->ToString();
+    }
+    s += ")";
     return s;
 }
 
-Node *BinaryNode::Differentiate()
+std::vector<int> Multi::FindDivisons()
 {
-    // (f +- g)' = f' +- g'
-    if (op == Token::ADD || op == Token::SUB)
-        return new BinaryNode(lhs->Differentiate(), rhs->Differentiate(), op);
-
-    // (fg)' = f'g + g'f
-    else if (op == Token::MUL)
-        return new BinaryNode(new BinaryNode(lhs->Differentiate(), rhs, Token::MUL), new BinaryNode(lhs, rhs->Differentiate(), Token::MUL), Token::ADD);
-
-    // (f/g)' = (f'g-g'f)/g*g
-    else if (op == Token::DIV)
-        return new BinaryNode(new BinaryNode(new BinaryNode(lhs->Differentiate(), rhs, Token::MUL), new BinaryNode(rhs->Differentiate(), lhs, Token::MUL), Token::SUB), new BinaryNode(rhs, rhs, Token::MUL), Token::DIV);
-
-    // (f^g)' = (e^(f*ln(g)))' = ... = f^g * (f'*ln(g) + f*g'/g)
-    else if (op == Token::POW)
-        return new BinaryNode(new BinaryNode(lhs, rhs, Token::POW), new BinaryNode(new BinaryNode(rhs->Differentiate(), new Unary(lhs, Token::LN), Token::MUL), new BinaryNode(new BinaryNode(lhs->Differentiate(), rhs, Token::MUL), lhs, Token::DIV), Token::ADD), Token::MUL);
-    return new Num(0);
+    std::vector<int> divs;
+    for (long unsigned int i = 0; i < args.size(); ++i)
+    {
+        if (args[i]->type == NodeType::Multi)
+        {
+            Multi *cand = dynamic_cast<Multi *>(args[i]);
+            if (cand->op == Token::DIV)
+                divs.emplace_back(i);
+        }
+    }
+    return divs;
 }
 
-Node *BinaryNode::Simplify()
+Node *Multi::MulStdForm()
 {
-    if (lhs->type == NodeType::NumNode)
+    std::vector<int> divs = FindDivisons();
+    if (divs.size() == 0)
+        return this;
+    Multi *numerator = new Multi(Token::MUL);
+    Multi *denominator = new Multi(Token::MUL);
+    for (long unsigned int i = 0; i < args.size(); i++)
     {
-        Num *l = dynamic_cast<Num *>(lhs);
-        if (fabs(l->val - 1) < 1e-14)
+        if (std::find(divs.begin(), divs.end(), i) != divs.end())
         {
-            // case: 1 * (...) = (...)
-            if (op == Token::MUL)
-                return rhs;
+            Multi *division = dynamic_cast<Multi *>(args[i]);
+            denominator->AddArg(division->args[1]);
         }
-        else if (fabs(l->val) < 1e-14)
-        {
-            // case: 0 * (...) = 0
-            if (op == Token::MUL)
-                return new Num(0);
-            // case: 0 + (...) = (...)
-            if (op == Token::ADD)
-                return rhs;
-        }
+        else
+            numerator->AddArg(args[i]);
     }
-    if (rhs->type == NodeType::NumNode)
-    {
-        Num *r = dynamic_cast<Num *>(rhs);
-        if (fabs(r->val - 1) < 1e-14)
-        {
-            // case: (...) * 1 = (...)
-            if (op == Token::MUL)
-                return lhs;
-        }
-        else if (fabs(r->val) < 1e-14)
-        {
-            // case: (...) * 0 = 0
-            if (op == Token::MUL)
-                return new Num(0);
-            // case: (...) + 0 = (...)
-            if (op == Token::ADD)
-                return lhs;
-        }
-    }
-    if (lhs->type == NodeType::NumNode && rhs->type == NodeType::NumNode)
-    {
-        Num *l = dynamic_cast<Num *>(lhs);
-        Num *r = dynamic_cast<Num *>(rhs);
-        if (op == Token::ADD)
-            return new Num(l->val + r->val);
-        else if (op == Token::SUB)
-            return new Num(l->val - r->val);
-        else if (op == Token::MUL)
-            return new Num(l->val * r->val);
-        else if (op == Token::DIV)
-            return new Num(l->val / r->val);
-        else if (op == Token::POW)
-            return new Num(pow(l->val, r->val));
-    }
+    return new Multi(numerator, denominator, Token::DIV);
+}
 
-    if (lhs->type == NodeType::VarNode && rhs->type == NodeType::NumNode)
+Node *Multi::Simplify()
+{
+    if (op == Token::ADD)
     {
-        Num* n = dynamic_cast<Num*>(rhs);
-        if(fabs(n->val - 1) < 1e-14)
-            return lhs;
+        Multi *m = new Multi(Token::ADD);
+        for (long unsigned int i = 0; i < args.size(); ++i)
+        {
+            m->AddArg(args[i]->Simplify());
+        }
+        return m;
     }
-
-    return new BinaryNode(lhs->Simplify(), rhs->Simplify(), op);
+    else if (op == Token::MUL)
+        return MulStdForm();
+    
+    return this;
 }

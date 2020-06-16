@@ -1,6 +1,7 @@
 #pragma once
 #include <iostream>
 #include <string>
+#include <vector>
 #include "token.h"
 
 enum class NodeType
@@ -8,23 +9,24 @@ enum class NodeType
     NumNode,
     VarNode,
     UnaryNode,
-    Binary
+    Multi
 };
 
 struct Node
 {
     NodeType type;
-    virtual std::string Print() = 0;
-    virtual Node *Differentiate() = 0;
+    virtual std::string ToString() = 0;
+    // virtual Node *Differentiate() = 0;
     virtual Node *Simplify() = 0;
+    Node* Reduce();
 };
 
 struct Num : Node
 {
     double val;
     Num(double _val);
-    std::string Print();
-    Node *Differentiate();
+    std::string ToString();
+    // Node *Differentiate();
     Node *Simplify();
 };
 
@@ -32,8 +34,8 @@ struct Var : Node
 {
     std::string id;
     Var(std::string _id);
-    std::string Print();
-    Node *Differentiate();
+    std::string ToString();
+    // Node *Differentiate();
     Node *Simplify();
 };
 
@@ -42,21 +44,25 @@ struct Unary : Node
     Node *arg;
     Token op;
     Unary(Node *_arg, Token _op);
-    std::string Print();
-    Node *Differentiate();
-    Node * BaseArg();
+    std::string ToString();
+    // Node *Differentiate();
+    Node *BaseArg();
     int Parity(int &p);
-    Node * SimplifyNegations();
+    Node *SimplifyNegations();
     Node *Simplify();
 };
 
-struct BinaryNode : Node
+struct Multi : Node
 {
-    Node *lhs;
-    Node *rhs;
+    std::vector<Node *> args;
     Token op;
-    BinaryNode(Node *_lhs, Node *_rhs, Token _op);
-    std::string Print();
-    Node *Differentiate();
+    Multi(Token _op);
+    Multi(Node* _lhs, Token _op);
+    Multi(Node* _lhs, Node* _rhs, Token _op);
+    void AddArg(Node *a);
+    std::string ToString();
+    // Node *Differentiate();
+    std::vector<int> FindDivisons();
+    Node* MulStdForm();
     Node *Simplify();
 };

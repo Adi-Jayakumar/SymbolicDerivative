@@ -19,19 +19,9 @@ int main()
     }
 
     int i = 0;
-    Node *n = p.Parse(i);
-    cout << n->Print() << endl;
-    Node *m = n->Simplify();
-    cout << m->Print() << endl;
-    // for (int i = 0; i < 5; i++)
-    // {
-    //     m = m->Simplify();
-    //     cout << m->Print() << endl;
-    // }
-    // int p = 0;
-    // Unary *u = new Unary(new Unary(new Unary(new Num(1000), LN), SUB), SUB);
-    // cout << u->Print() << std::endl;
-    // cout << u->Simplify()->Print() << std::endl;
-
+    Node* n = p.Parse(i);
+    cout << n->ToString() << endl;
+    Node* m = n->Reduce();
+    cout << m->ToString()<< endl;
     return 0;
 }
