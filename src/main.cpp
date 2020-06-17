@@ -21,7 +21,7 @@ int main()
     int i = 0;
     Node *n = p.Parse(i);
     cout << n->Print() << endl;
-    Node *m = n->Simplify();
+    Node *m = n->Differentiate();
     cout << m->Print() << endl;
     // for (int i = 0; i < 5; i++)
     // {
