@@ -21,9 +21,7 @@ struct Node
     // virtual Node *Differentiate() = 0;
     virtual Node *Simplify() = 0;
     Node *Reduce();
-    virtual void BuildDOTNodeAlias(int &label, std::map<Node *, int> &map) = 0;
-    virtual std::string GetDOTLabel() = 0;
-    virtual void BuildDOTTree(std::string &DOT, std::map<Node*, int> &map) = 0;
+    virtual std::string SelfToString() = 0;
 };
 
 struct Num : Node
@@ -33,9 +31,7 @@ struct Num : Node
     std::string ToString();
     // Node *Differentiate();
     Node *Simplify();
-    void BuildDOTNodeAlias(int &label, std::map<Node *, int> &map);
-    std::string GetDOTLabel();
-    void BuildDOTTree(std::string &DOT, std::map<Node *, int> &map);
+    std::string SelfToString();
 };
 
 struct Var : Node
@@ -45,9 +41,7 @@ struct Var : Node
     std::string ToString();
     // Node *Differentiate();
     Node *Simplify();
-    void BuildDOTNodeAlias(int &label, std::map<Node *, int> &map);
-    std::string GetDOTLabel();
-    void BuildDOTTree(std::string &DOT, std::map<Node *, int> &map);
+    std::string SelfToString();
 };
 
 struct Unary : Node
@@ -61,9 +55,7 @@ struct Unary : Node
     int Parity(int &p);
     Node *SimplifyNegations();
     Node *Simplify();
-    void BuildDOTNodeAlias(int &label, std::map<Node *, int> &map);
-    std::string GetDOTLabel();
-    void BuildDOTTree(std::string &DOT, std::map<Node *, int> &map);
+    std::string SelfToString();
 };
 
 struct Multi : Node
@@ -79,7 +71,5 @@ struct Multi : Node
     std::vector<int> FindDivisons();
     Node *MulStdForm();
     Node *Simplify();
-    void BuildDOTNodeAlias(int &label, std::map<Node *, int> &map);
-    std::string GetDOTLabel();
-    void BuildDOTTree(std::string &DOT, std::map<Node *, int> &map);
+    std::string SelfToString();
 };

@@ -1,3 +1,4 @@
+#include <cassert>
 #include <iostream>
 #include <map>
 #include <set>
@@ -8,17 +9,67 @@
 
 using namespace std;
 
-std::string DOTLabels(std::map<Node *, int> map)
+namespace DOT
 {
-    std::string res = "";
-    auto order = [](std::pair<Node*, int> x, std::pair<Node*, int> y){return x.second < y.second;};
-    std::set<std::pair<Node*, int>, decltype(order)> s(map.begin(), map.end(), order);
-    for (auto x : s)
+
+    struct Point
     {
-        res += std::to_string(map[x.first]) + " [label = \"" + x.first->GetDOTLabel() + "\" ]" + '\n';
+        NodeType nt;
+        std::string s;
+    };
+
+    void Tree(Node *n, std::map<int, Point> &map, int &label, std::string &DOT)
+    {
+        map[++label] = Point{n->type, n->SelfToString()};
+        if (n->type == NodeType::NumNode || n->type == NodeType::VarNode)
+        {
+            DOT += std::to_string(label) + '\n';
+            return;
+        }
+        else if (n->type == NodeType::UnaryNode)
+        {
+            Unary *u = dynamic_cast<Unary *>(n);
+            DOT += std::to_string(label) + "--";
+            Tree(u->arg, map, label, DOT);
+            return;
+        }
+        else
+        {
+            assert(n->type == NodeType::Multi);
+            Multi *m = dynamic_cast<Multi *>(n);
+            int locLabel = label;
+            for (Node *n : m->args)
+            {
+                DOT += std::to_string(locLabel) + "--";
+                Tree(n, map, label, DOT);
+            }
+            return;
+        }
     }
-    return res;
-}
+
+    std::string ToDOT(Node *n)
+    {
+        std::string mapping = "";
+        std::map<int, Point> map;
+        int label = 0;
+
+        Tree(n, map, label, mapping);
+        std::string labels = "";
+        for (auto const &[id, pt] : map)
+        {
+            std::string style;
+            if (pt.nt == NodeType::Multi || pt.nt == NodeType::UnaryNode)
+                style = ", style = filled, color = black, fillcolor = gray95";
+            else if (pt.nt == NodeType::VarNode)
+                style = ", style = filled, color = black, fillcolor = cadetblue1";
+            else
+                style = ", style = filled, color = black, fillcolor = white";
+            labels += std::to_string(id) + "[label = \"" + pt.s + "\" " + style + "] \n";
+        }
+
+        return "graph {\n" + labels + mapping + "}\n";
+    }
+} // namespace DOT
 
 int main()
 {
@@ -28,9 +79,9 @@ int main()
     for (Unit u : p.tk.tokens)
     {
         std::cout << "Token: " << static_cast<int>(u.t) << " "
-             << "Value: " << u.val << " "
-             << "Var: " << u.var << " "
-             << "Func: " << u.func << endl;
+                  << "Value: " << u.val << " "
+                  << "Var: " << u.var << " "
+                  << "Func: " << u.func << endl;
     }
 
     int i = 0;
@@ -42,27 +93,14 @@ int main()
 
     std::cout << endl;
 
-    std::map<Node *, int> map;
-    int label = 0;
+    std::string preDOT = DOT::ToDOT(n);
 
-    n->BuildDOTNodeAlias(label, map);
-
-    std::cout << endl;
-
-    for (auto x : map)
+    for (int i = 0; i < 5; i++)
     {
-        std::cout << x.first->GetDOTLabel() << " " << x.second << endl;
+        cout <<preDOT << endl;
+        n = n->Simplify();
+        preDOT = DOT::ToDOT(n);
     }
-
-    std::cout << endl;
-
-    std::string DOT = "";
-
-    std::cout << endl;
-
-    std::cout << DOTLabels(map) << endl;
-    n->BuildDOTTree(DOT, map);
-    std::cout << DOT << endl;
 
     return 0;
 }
