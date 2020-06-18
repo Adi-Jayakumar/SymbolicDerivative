@@ -35,6 +35,22 @@ Node *Num::Simplify()
     return this;
 }
 
+void Num::BuildDOTNodeAlias(int &label, std::map<Node *, int> &map)
+{
+    label++;
+    map[this] = label;
+}
+
+std::string Num::GetDOTLabel()
+{
+    return ToString();
+}
+
+void Num::BuildDOTTree(std::string &DOT, std::map<Node *, int> &map)
+{
+    DOT += std::to_string(map[this]);
+}
+
 Var::Var(std::string _id)
 {
     type = NodeType::VarNode;
@@ -49,6 +65,22 @@ std::string Var::ToString()
 Node *Var::Simplify()
 {
     return this;
+}
+
+void Var::BuildDOTNodeAlias(int &label, std::map<Node *, int> &map)
+{
+    label++;
+    map[this] = label;
+}
+
+std::string Var::GetDOTLabel()
+{
+    return ToString();
+}
+
+void Var::BuildDOTTree(std::string &DOT, std::map<Node *, int> &map)
+{
+    DOT += std::to_string(map[this]);
 }
 
 Unary::Unary(Node *_arg, Token _op)
@@ -144,11 +176,42 @@ Node *Unary::Simplify()
     return SimplifyNegations();
 }
 
+void Unary::BuildDOTNodeAlias(int &label, std::map<Node *, int> &map)
+{
+    label++;
+    map[this] = label;
+    arg->BuildDOTNodeAlias(label, map);
+}
+
+std::string Unary::GetDOTLabel()
+{
+    if (op == Token::SUB)
+        return "-";
+    else if (op == Token::SIN)
+        return "sin";
+    else if (op == Token::COS)
+        return "cos";
+    else if (op == Token::TAN)
+        return "tan";
+    else if (op == Token::EXP)
+        return "exp";
+    else if (op == Token::LN)
+        return "ln";
+    return "";
+}
+
+void Unary::BuildDOTTree(std::string &DOT, std::map<Node *, int> &map)
+{
+    DOT += std::to_string(map[this]) + "->";
+    arg->BuildDOTTree(DOT, map);
+}
+
 Multi::Multi(Token _op)
 {
     op = _op;
     type = NodeType::Multi;
 }
+
 Multi::Multi(Node *arg, Token _op)
 {
     op = _op;
@@ -239,6 +302,37 @@ Node *Multi::Simplify()
     }
     else if (op == Token::MUL)
         return MulStdForm();
-    
+
     return this;
+}
+
+void Multi::BuildDOTNodeAlias(int &label, std::map<Node *, int> &map)
+{
+    ++label;
+    map[this] = label;
+    for (Node *n : args)
+        n->BuildDOTNodeAlias(label, map);
+}
+
+std::string Multi::GetDOTLabel()
+{
+    if (op == Token::ADD)
+        return "+";
+    else if (op == Token::MUL)
+        return "*";
+    else if (op == Token::DIV)
+        return "/";
+    else if (op == Token::POW)
+        return "^";
+    return "";
+}
+
+void Multi::BuildDOTTree(std::string &DOT, std::map<Node *, int> &map)
+{
+    for(Node* n : args)
+    {
+        DOT += std::to_string(map[this]) + "->";
+        n->BuildDOTTree(DOT, map);
+        DOT += '\n';
+    }
 }
