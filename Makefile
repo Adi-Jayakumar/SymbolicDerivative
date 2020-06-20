@@ -1,6 +1,6 @@
 
 CC		:= g++ 
-C_FLAGS := -std=c++17 -Wall -Wextra -O3 -march=native -fext-numeric-literals -fopenmp 
+C_FLAGS := -g -std=c++17 -O3 -Wall -Wextra -march=native -fext-numeric-literals -fopenmp 
 
 BIN		:= bin
 SRC		:= src

@@ -9,7 +9,6 @@ Parser::Parser(std::string _file)
 
 Node *Parser::Parse(int &i)
 {
-
     Node *lhs = ParseMul(i);
     while (true)
     {
@@ -136,5 +135,5 @@ Node *Parser::ParseUnit(int &i)
         i++;
         return new Unary(ParseUnit(i), f);
     }
-    return new Num(0);
+    return new Num(0.);
 }

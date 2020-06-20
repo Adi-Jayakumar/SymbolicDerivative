@@ -1,10 +1,10 @@
 #pragma once
+#include "token.h"
 #include <iostream>
 #include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include "token.h"
 
 enum class NodeType
 {
@@ -18,19 +18,16 @@ struct Node
 {
     NodeType type;
     virtual std::string ToString() = 0;
-    // virtual Node *Differentiate() = 0;
-    virtual Node *Simplify() = 0;
-    Node *Reduce();
     virtual std::string SelfToString() = 0;
+    virtual ~Node() = 0;
 };
 
 struct Num : Node
 {
     double val;
     Num(double _val);
+    Num(Num *n) : Num(n->val){}
     std::string ToString();
-    // Node *Differentiate();
-    Node *Simplify();
     std::string SelfToString();
 };
 
@@ -38,9 +35,8 @@ struct Var : Node
 {
     std::string id;
     Var(std::string _id);
+    Var(Var *v) : Var(v->id){}
     std::string ToString();
-    // Node *Differentiate();
-    Node *Simplify();
     std::string SelfToString();
 };
 
@@ -49,12 +45,9 @@ struct Unary : Node
     Node *arg;
     Token op;
     Unary(Node *_arg, Token _op);
+    Unary(Unary *u) : Unary(u->arg, u->op){}
+    ~Unary();
     std::string ToString();
-    // Node *Differentiate();
-    Node *BaseArg();
-    int Parity(int &p);
-    Node *SimplifyNegations();
-    Node *Simplify();
     std::string SelfToString();
 };
 
@@ -65,11 +58,10 @@ struct Multi : Node
     Multi(Token _op);
     Multi(Node *_lhs, Token _op);
     Multi(Node *_lhs, Node *_rhs, Token _op);
+    Multi(std::vector<Node *> _args, Token _op);
+    Multi(Multi *m) : Multi(m->args, m->op){}
+    ~Multi();
     void AddArg(Node *a);
     std::string ToString();
-    // Node *Differentiate();
-    std::vector<int> FindDivisons();
-    Node *MulStdForm();
-    Node *Simplify();
     std::string SelfToString();
 };

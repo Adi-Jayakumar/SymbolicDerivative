@@ -29,8 +29,6 @@ void Tokeniser::Tokenise()
             {"cos", Token::COS},
             {"tan", Token::TAN}
         };
-    std::cout << expr
-              << endl;
     Token token = Token::EoF;
     std::string var = "";
     std::string func = "";
