@@ -181,12 +181,7 @@ namespace Simplify
                     additive->AddArg(multiArg);
                 else
                 {
-                    std::vector<Node *> nonNeg;
-                    std::vector<Node *> neg;
-                    for (Node *m : multiArg->args)
-                    {
-                        
-                    }
+                    
                 }
             }
         }
