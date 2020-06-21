@@ -30,10 +30,10 @@ Node *Parser::Parse(int &i)
         if (op == Token::SUB)
             rhs = new Multi(new Num(-1), rhs, Token::MUL);
 
-        if (lhs->type != NodeType::Multi)
-            lhs = new Multi(lhs, Token::ADD);
+        // if (lhs->type != NodeType::Multi)
+        lhs = new Multi(lhs, Token::ADD);
 
-        else if (dynamic_cast<Multi *>(lhs)->op != Token::ADD)
+        if (dynamic_cast<Multi *>(lhs)->op != Token::ADD)
             lhs = new Multi(lhs, Token::ADD);
 
         Multi *l = dynamic_cast<Multi *>(lhs);
@@ -64,10 +64,10 @@ Node *Parser::ParseMul(int &i)
         if (op == Token::DIV)
             rhs = new Multi(new Num(1), rhs, Token::DIV);
 
-        if (lhs->type != NodeType::Multi)
-            lhs = new Multi(lhs, Token::MUL);
+        // if (lhs->type != NodeType::Multi)
+        lhs = new Multi(lhs, Token::MUL);
 
-        else if (dynamic_cast<Multi *>(lhs)->op != Token::MUL)
+        if (dynamic_cast<Multi *>(lhs)->op != Token::MUL)
             lhs = new Multi(lhs, Token::MUL);
 
         Multi *l = dynamic_cast<Multi *>(lhs);
@@ -93,10 +93,10 @@ Node *Parser::ParseInd(int &i)
         i++;
         Node *rhs = ParseUnit(i);
 
-        if (lhs->type != NodeType::Multi)
-            lhs = new Multi(lhs, Token::POW);
+        // if (lhs->type != NodeType::Multi)
+        lhs = new Multi(lhs, Token::POW);
 
-        else if (dynamic_cast<Multi *>(lhs)->op != Token::POW)
+        if (dynamic_cast<Multi *>(lhs)->op != Token::POW)
             lhs = new Multi(lhs, Token::POW);
 
         Multi *l = dynamic_cast<Multi *>(lhs);
@@ -117,6 +117,7 @@ Node *Parser::ParseUnit(int &i)
     else if (tk.tokens[i].t == Token::SUB)
     {
         i++;
+        // return new Multi(new Num(-1), ParseUnit(i), Token::MUL);
         return new Unary(ParseUnit(i), Token::SUB);
     }
     else if (tk.tokens[i].t == Token::VAR)
@@ -133,7 +134,7 @@ Node *Parser::ParseUnit(int &i)
     {
         Token f = tk.tokens[i].t;
         i++;
-        return new Unary(ParseUnit(i), f);
+        return new Multi(ParseUnit(i), f);
     }
     return new Num(0.);
 }

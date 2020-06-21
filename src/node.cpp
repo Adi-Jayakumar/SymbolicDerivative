@@ -35,7 +35,7 @@ std::string Var::SelfToString() { return id; }
 Unary::Unary(Node *_arg, Token _op)
 {
     arg = _arg;
-    op  = _op;
+    op = _op;
     type = NodeType::UnaryNode;
 }
 
@@ -131,12 +131,27 @@ std::string Multi::ToString()
         {
             if (op == Token::ADD)
                 s += " + ";
+            else if (op == Token::SUB)
+                s += " - ";
             else if (op == Token::MUL)
                 s += " * ";
             else if (op == Token::DIV)
                 s += " / ";
             else if (op == Token::POW)
                 s += " ^ ";
+        }
+        else
+        {
+            if (op == Token::LN)
+                s += "ln";
+            else if (op == Token::EXP)
+                s += "exp";
+            else if (op == Token::SIN)
+                s += "sin";
+            else if (op == Token::COS)
+                s += "cos";
+            else if (op == Token::TAN)
+                s += "tan";
         }
         s += args[i]->ToString();
     }

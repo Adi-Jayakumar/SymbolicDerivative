@@ -14,13 +14,13 @@ int main()
 
     Parser p = Parser("test.txt");
     p.tk.Tokenise();
-    for (Unit u : p.tk.tokens)
-    {
-        std::cout << "Token: " << static_cast<int>(u.t) << " "
-                  << "Value: " << u.val << " "
-                  << "Var: " << u.var << " "
-                  << "Func: " << u.func << std::endl;
-    }
+    // for (Unit u : p.tk.tokens)
+    // {
+    //     std::cout << "Token: " << static_cast<int>(u.t) << " "
+    //               << "Value: " << u.val << " "
+    //               << "Var: " << u.var << " "
+    //               << "Func: " << u.func << std::endl;
+    // }
 
     int i = 0;
 
@@ -28,9 +28,6 @@ int main()
 
     Node *n = p.Parse(i);
     std::cout << n->ToString() << std::endl;
-    Multi*m = dynamic_cast<Multi*>(n);
-    n = Simplify::MulCanonicalForm(m);
-    std::cout<<n->ToString()<< std::endl;
 
     // // std::cout << DOT::ToDOT(n) << std::endl;
 
