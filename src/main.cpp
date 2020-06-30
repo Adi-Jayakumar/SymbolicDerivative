@@ -3,11 +3,7 @@
 #include "parser.h"
 #include "simplify.h"
 #include "tokeniser.h"
-#include <cassert>
-#include <functional>
 #include <iostream>
-#include <map>
-#include <set>
 
 int main()
 {
@@ -27,13 +23,9 @@ int main()
     std::cout << std::endl;
 
     Node *n = p.Parse(i);
-    std::cout << n->ToString() << std::endl;
-
-    // // std::cout << DOT::ToDOT(n) << std::endl;
-
-    // n = Simplify::Simplify(n);
-    // // std::cout << DOT::ToDOT(n) << std::endl;
-    // std::cout << n->ToString() << std::endl;
-
+    Multi *m = dynamic_cast<Multi *>(n);
+    Node *mUnrolled = Simplify::Unroll(m);
+    Node *foldV = Simplify::FoldVariables(mUnrolled);
+    std::cout << "Folded Variables: " << foldV->ToString() << std::endl;
     return 0;
 }

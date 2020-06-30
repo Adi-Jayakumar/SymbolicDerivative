@@ -12,16 +12,9 @@ namespace DOT
             DOT += std::to_string(label) + '\n';
             return;
         }
-        else if (n->type == NodeType::UnaryNode)
-        {
-            Unary *u = dynamic_cast<Unary *>(n);
-            DOT += std::to_string(label) + "--";
-            Tree(u->arg, map, label, DOT);
-            return;
-        }
         else
         {
-            assert(n->type == NodeType::Multi);
+            assert(n->type == NodeType::MultiNode);
             Multi *m = dynamic_cast<Multi *>(n);
             int locLabel = label;
             for (Node *n : m->args)
@@ -44,7 +37,7 @@ namespace DOT
         for (auto const &[id, pt] : map)
         {
             std::string style;
-            if (pt.nt == NodeType::Multi || pt.nt == NodeType::UnaryNode)
+            if (pt.nt == NodeType::MultiNode)
                 style = ", style = filled, color = black, fillcolor = gray95";
             else if (pt.nt == NodeType::VarNode)
                 style = ", style = filled, color = black, fillcolor = cadetblue1";
@@ -53,6 +46,6 @@ namespace DOT
             labels += std::to_string(id) + "[label = \"" + pt.s + "\" " + style + "] \n";
         }
 
-        return "graph {\n" + labels + mapping + "}\n";
+        return "graph\n{\n" + labels + mapping + "}\n";
     }
 } // namespace DOT

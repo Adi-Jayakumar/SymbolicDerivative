@@ -4,7 +4,7 @@ Symbolic Derivative Calculator
 
 ## TODO 
  - [ ] Single node - union of func enum and double
- - [ ] Multi node
+ - [x] Multi node
  - [ ] Use std::unique_ptr
  - [ ] Differentiation
  - [ ] Multi-Variables

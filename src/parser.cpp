@@ -30,15 +30,7 @@ Node *Parser::Parse(int &i)
         if (op == Token::SUB)
             rhs = new Multi(new Num(-1), rhs, Token::MUL);
 
-        // if (lhs->type != NodeType::Multi)
-        lhs = new Multi(lhs, Token::ADD);
-
-        if (dynamic_cast<Multi *>(lhs)->op != Token::ADD)
-            lhs = new Multi(lhs, Token::ADD);
-
-        Multi *l = dynamic_cast<Multi *>(lhs);
-        l->AddArg(rhs);
-        lhs = l;
+        lhs = new Multi(lhs, rhs, Token::ADD);
     }
 }
 
@@ -64,15 +56,7 @@ Node *Parser::ParseMul(int &i)
         if (op == Token::DIV)
             rhs = new Multi(new Num(1), rhs, Token::DIV);
 
-        // if (lhs->type != NodeType::Multi)
-        lhs = new Multi(lhs, Token::MUL);
-
-        if (dynamic_cast<Multi *>(lhs)->op != Token::MUL)
-            lhs = new Multi(lhs, Token::MUL);
-
-        Multi *l = dynamic_cast<Multi *>(lhs);
-        l->AddArg(rhs);
-        lhs = l;
+        lhs = new Multi(lhs, rhs, Token::MUL);
     }
 }
 
@@ -91,17 +75,8 @@ Node *Parser::ParseInd(int &i)
             return lhs;
 
         i++;
-        Node *rhs = ParseUnit(i);
-
-        // if (lhs->type != NodeType::Multi)
-        lhs = new Multi(lhs, Token::POW);
-
-        if (dynamic_cast<Multi *>(lhs)->op != Token::POW)
-            lhs = new Multi(lhs, Token::POW);
-
-        Multi *l = dynamic_cast<Multi *>(lhs);
-        l->AddArg(rhs);
-        lhs = l;
+        Node* rhs = ParseUnit(i);
+        lhs = new Multi(lhs, rhs, Token::POW);
     }
 }
 
@@ -117,8 +92,7 @@ Node *Parser::ParseUnit(int &i)
     else if (tk.tokens[i].t == Token::SUB)
     {
         i++;
-        // return new Multi(new Num(-1), ParseUnit(i), Token::MUL);
-        return new Unary(ParseUnit(i), Token::SUB);
+        return new Multi(new Num(-1), ParseUnit(i), Token::MUL);
     }
     else if (tk.tokens[i].t == Token::VAR)
         return new Var(tk.tokens[i].var);
