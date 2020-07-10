@@ -1,4 +1,5 @@
 #pragma once
+#include <iostream>
 #include "node.h"
 #include "tokeniser.h"
 

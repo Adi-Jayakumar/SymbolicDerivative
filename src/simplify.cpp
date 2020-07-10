@@ -1,8 +1,4 @@
 #include "simplify.h"
-#include <algorithm>
-#include <cassert>
-#include <cmath>
-#include <sstream>
 
 namespace Simplify
 {
@@ -18,53 +14,142 @@ namespace Simplify
         else
         {
             assert(source->type == NodeType::MultiNode);
-            Multi *m = dynamic_cast<Multi *>(source);
+            Multi *mSource = static_cast<Multi *>(source);
 
-            // checking if simplification is required
-            bool doSimplify = NeedSimplify(m);
+            Multi *unrolled = Unroll(mSource);
+            std::cout << "Unrolled: " << unrolled->ToString() << std::endl;
 
-            // Carrying out the required simplification if it is required
-            if ((m->op == Token::MUL) && doSimplify)
-                return Simplify(SimplifyMultiplication(m));
-            return source;
+            Node *noConstants = FoldConstants(unrolled);
+            std::cout << "constants folded: " << noConstants->ToString() << std::endl;
+
+            Node *folded = FoldVariables(noConstants);
+            std::cout << "variables folded: " << folded->ToString() << std::endl;
+
+            Node *canon;
+            if (folded->type == NodeType::MultiNode)
+            {
+                Multi *mFolded = static_cast<Multi *>(folded);
+                canon = CanonicalForm(Unroll(mFolded));
+            }
+            else
+                canon = CanonicalForm(folded);
+
+            std::cout << "canonical form: " << canon->ToString() << std::endl;
+            if (canon->type != NodeType::MultiNode)
+                return canon;
+            else
+            {
+                Multi *mCanon = static_cast<Multi *>(canon);
+                if (mCanon->op != Operator::SUB && mCanon->op != Operator::DIV)
+                    return SimplifyNodeByNode(mCanon);
+                else
+                {
+                    if (mCanon->op == Operator::SUB)
+                    {
+                        return SimplifyNodeByNode(SimplifySubtraction(mCanon));
+                    }
+                    else
+                        return SimplifyNodeByNode(SimplifyDivision(mCanon));
+                }
+            }
         }
     }
 
-    bool NeedSimplify(Multi *source)
+    Node *SimplifyNodeByNode(Node *source)
     {
-        std::map<std::string, int> varNames;
-        int numCount = 0;
-        bool doSimplify = false;
-
-        // counting the number of Num and Var nodes,
-        // and checking if a child is a Multi
-        for (Node *n : source->args)
+        if (source->type != NodeType::MultiNode)
+            return source;
+        else
         {
-            if (n->type == NodeType::NumNode)
-                numCount++;
-            else if (n->type == NodeType::VarNode)
-                varNames[n->SelfToString()]++;
-            else if (n->type == NodeType::MultiNode)
+            Multi *mSource = static_cast<Multi *>(source);
+            Multi *res = new Multi(mSource->op);
+            for (Node *n : mSource->args)
             {
-                doSimplify = true;
-                break;
+                res->AddArg(Simplify(n));
             }
+            return res;
         }
-
-        // combining the conditions laid out before
-        doSimplify = doSimplify || (numCount > 1);
-        for (auto const &[var, occurances] : varNames)
-        {
-            doSimplify = doSimplify || (occurances > 1);
-        }
-        return doSimplify;
     }
 
     Multi *Unroll(Multi *source)
     {
-        // std::cout << "Unroll: " << source->ToString() << " With op: " << static_cast<int>(source->op) << std::endl;
-        if (source->op == Token::POW)
+        std::cout << "Unroll: " << source->ToString() << " With op: " << static_cast<int>(source->op) << std::endl;
+        if (source->op == Operator::POW)
             return source;
+        else if (IsFunc(source))
+        {
+            assert(source->args.size() == 1);
+            Node *arg = source->args[0];
+            if (arg->type != NodeType::MultiNode)
+                return source;
+            else
+            {
+                Multi *mArg = static_cast<Multi *>(source->args[0]);
+                return new Multi(Unroll(mArg), source->op);
+            }
+        }
+
+        if (source->op == Operator::DIV || source->op == Operator::SUB)
+        {
+            assert(source->args.size() == 2);
+            Node *lhs = source->args[0];
+            Node *rhs = source->args[1];
+            Multi *simpLHS;
+            Multi *simpRHS;
+            if (source->op == Operator::DIV)
+            {
+                simpLHS = new Multi(Operator::MUL);
+                simpRHS = new Multi(Operator::MUL);
+            }
+            else
+            {
+                simpLHS = new Multi(Operator::ADD);
+                simpRHS = new Multi(Operator::ADD);
+            }
+            if (lhs->type != NodeType::MultiNode)
+                simpLHS->AddArg(lhs);
+            else
+            {
+                Multi *mLHS = static_cast<Multi *>(lhs);
+                mLHS = Unroll(mLHS);
+                if (mLHS->op != source->op)
+                    simpLHS->AddArg(mLHS);
+                // (a - b) - c = a - (b + c)
+                else
+                {
+                    assert(mLHS->args.size() == 2);
+                    simpLHS->AddArg(mLHS->args[0]);
+                    simpRHS->AddArg(mLHS->args[1]);
+                }
+            }
+            if (rhs->type != NodeType::MultiNode)
+                simpRHS->AddArg(rhs);
+            else
+            {
+                Multi *mRHS = static_cast<Multi *>(rhs);
+                if (mRHS->op != source->op)
+                    simpRHS->AddArg(mRHS);
+                // a - (b - c) = (a + c) - b
+                else
+                {
+                    assert(mRHS->args.size() == 2);
+                    simpLHS->AddArg(mRHS->args[1]);
+                    simpRHS->AddArg(mRHS->args[0]);
+                }
+            }
+            simpLHS = Unroll(simpLHS);
+            simpRHS = Unroll(simpRHS);
+
+            if (simpLHS->args.size() == 1 && simpRHS->args.size() == 1)
+                return new Multi(simpLHS->args[0], simpRHS->args[0], source->op);
+            else if (simpLHS->args.size() == 1 && simpRHS->args.size() > 1)
+                return new Multi(simpLHS->args[0], simpRHS, source->op);
+            else if (simpLHS->args.size() > 1 && simpRHS->args.size() == 1)
+                return new Multi(simpLHS, simpRHS->args[0], source->op);
+            else
+                return new Multi(simpLHS, simpRHS, source->op);
+        }
+
         Multi *unrolled = new Multi(source->op);
         bool isUnrolled = true;
         for (Node *n : source->args)
@@ -73,7 +158,8 @@ namespace Simplify
                 unrolled->AddArg(n);
             else
             {
-                Multi *mArg = dynamic_cast<Multi *>(n);
+                // Multi *mArg = dynamic_cast<Multi *>(n);
+                Multi *mArg = static_cast<Multi *>(n);
                 if (mArg->op != source->op)
                     unrolled->AddArg(Unroll(mArg));
                 else
@@ -91,17 +177,19 @@ namespace Simplify
 
     Node *PowCanonicalForm(Multi *source)
     {
-        if (source->op == Token::POW)
+        if (source->op == Operator::POW)
         {
             assert(source->args.size() == 2);
             if (source->args[0]->type == NodeType::MultiNode)
             {
-                Multi *mChildArg = dynamic_cast<Multi *>(source->args[0]);
-                if (mChildArg->op == Token::MUL)
+                // Multi *mChildArg = dynamic_cast<Multi *>(source->args[0]);
+                Multi *mChildArg = static_cast<Multi *>(source->args[0]);
+
+                if (mChildArg->op == Operator::MUL)
                 {
-                    Multi *expanded = new Multi(Token::MUL);
+                    Multi *expanded = new Multi(Operator::MUL);
                     for (Node *n : mChildArg->args)
-                        expanded->AddArg(new Multi(n, source->args[1], Token::POW));
+                        expanded->AddArg(new Multi(n, source->args[1], Operator::POW));
                     return expanded;
                 }
             }
@@ -111,11 +199,11 @@ namespace Simplify
 
     Node *MulCanonicalForm(Multi *source)
     {
-        if (source->op != Token::MUL)
+        if (source->op != Operator::MUL)
             return source;
 
-        Multi *numerator = new Multi(Token::MUL);
-        Multi *denominator = new Multi(Token::MUL);
+        Multi *numerator = new Multi(Operator::MUL);
+        Multi *denominator = new Multi(Operator::MUL);
 
         for (Node *n : source->args)
         {
@@ -123,26 +211,36 @@ namespace Simplify
                 numerator->AddArg(n);
             else
             {
-                Multi *mArg = dynamic_cast<Multi *>(n);
+                // Multi *mArg = dynamic_cast<Multi *>(n);
+                Multi *mArg = static_cast<Multi *>(n);
                 Node *canonical = CanonicalForm(mArg);
                 if (canonical->type != NodeType::MultiNode)
                 {
                     numerator->AddArg(canonical);
                     continue;
                 }
-                mArg = dynamic_cast<Multi *>(canonical);
-                if (mArg->op != Token::DIV)
+                // mArg = dynamic_cast<Multi *>(canonical);
+                mArg = static_cast<Multi *>(canonical);
+                if (mArg->op != Operator::DIV)
                     numerator->AddArg(mArg);
                 else
                 {
                     // division node cannot have more than 2 arguments
                     assert(mArg->args.size() == 2);
+                    if (mArg->args[0]->type != NodeType::NumNode)
+                        numerator->AddArg(mArg->args[0]);
+                    else
+                    {
+                        Num *n = static_cast<Num *>(mArg->args[0]);
+                        if (n->val != 1)
+                            numerator->AddArg(n);
+                    }
                     denominator->AddArg(mArg->args[1]);
                 }
             }
         }
 
-        Multi *canonical = new Multi(Token::DIV);
+        Multi *canonical = new Multi(Operator::DIV);
 
         if (numerator->args.size() == 0 && denominator->args.size() == 1)
         {
@@ -183,11 +281,11 @@ namespace Simplify
 
     Node *AddCanonicalForm(Multi *source)
     {
-        if (source->op != Token::ADD)
+        if (source->op != Operator::ADD)
             return source;
 
-        Multi *additive = new Multi(Token::ADD);
-        Multi *subtractive = new Multi(Token::ADD);
+        Multi *additive = new Multi(Operator::ADD);
+        Multi *subtractive = new Multi(Operator::ADD);
 
         for (Node *n : source->args)
         {
@@ -197,20 +295,22 @@ namespace Simplify
                 additive->AddArg(n);
             else
             {
-                Multi *mArg = dynamic_cast<Multi *>(n);
-                if (mArg->op != Token::MUL)
+                // Multi *mArg = dynamic_cast<Multi *>(n);
+                Multi *mArg = static_cast<Multi *>(n);
+                if (mArg->op != Operator::MUL)
                     additive->AddArg(mArg);
                 else
                 {
                     bool isNeg = false;
-                    Multi *nonNeg = new Multi(Token::MUL);
+                    Multi *nonNeg = new Multi(Operator::MUL);
                     for (Node *m : mArg->args)
                     {
                         if (m->type != NodeType::NumNode)
                             nonNeg->AddArg(m);
                         else
                         {
-                            Num *num = dynamic_cast<Num *>(m);
+                            // Num *num = dynamic_cast<Num *>(m);
+                            Num *num = static_cast<Num *>(m);
                             if (num->val == -1)
                                 isNeg = !isNeg;
                             else
@@ -235,7 +335,7 @@ namespace Simplify
             }
         }
 
-        Multi *canonical = new Multi(Token::SUB);
+        Multi *canonical = new Multi(Operator::SUB);
 
         if (additive->args.size() == 0 && subtractive->args.size() == 1)
         {
@@ -276,32 +376,41 @@ namespace Simplify
 
     Node *CanonicalForm(Node *source)
     {
+        std::cout << "CanonicalForm of: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
         {
-            Multi *mSource = dynamic_cast<Multi *>(source);
-            if (mSource->op == Token::MUL)
+            // Multi *mSource = dynamic_cast<Multi *>(source);
+            Multi *mSource = static_cast<Multi *>(source);
+            if (mSource->op == Operator::MUL)
                 return MulCanonicalForm(mSource);
-            else if (mSource->op == Token::ADD)
+            else if (mSource->op == Operator::ADD)
                 return AddCanonicalForm(mSource);
-            else if (mSource->op == Token::POW)
+            else if (mSource->op == Operator::POW)
                 return PowCanonicalForm(mSource);
-            return mSource;
+            else
+            {
+                Multi *res = new Multi(mSource->op);
+                for (Node *n : mSource->args)
+                    res->AddArg(CanonicalForm(n));
+                return res;
+            }
         }
     }
 
     Node *FoldConstants(Node *source)
     {
-        // std::cout << "Fold constants of: " << source->ToString() << std::endl;
+        std::cout << "Fold constants of: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
         {
-            Multi *mSource = dynamic_cast<Multi *>(source);
-            if (mSource->op == Token::ADD || mSource->op == Token::MUL)
+            // Multi *mSource = dynamic_cast<Multi *>(source);
+            Multi *mSource = static_cast<Multi *>(source);
+            if (mSource->op == Operator::ADD || mSource->op == Operator::MUL)
             {
-                double id = mSource->op == Token::ADD ? 0 : 1;
+                double id = mSource->op == Operator::ADD ? 0 : 1;
                 double val = id;
                 std::vector<Node *> notNum;
                 for (Node *n : mSource->args)
@@ -309,39 +418,62 @@ namespace Simplify
                     Node *eval = FoldConstants(n);
                     if (eval->type == NodeType::NumNode)
                     {
-                        Num *nEval = dynamic_cast<Num *>(eval);
-                        if (mSource->op == Token::ADD)
+                        // Num *nEval = dynamic_cast<Num *>(eval);
+                        Num *nEval = static_cast<Num *>(eval);
+                        if (mSource->op == Operator::ADD)
                             val += nEval->val;
                         else
+                        {
+                            if (nEval->val == 0)
+                                return new Num(0.);
                             val *= nEval->val;
+                        }
                     }
                     else
                         notNum.emplace_back(eval);
                 }
                 if (val != id)
                     notNum.emplace_back(new Num(val));
+                else if (val == id)
+                {
+                    if (notNum.size() == 0)
+                        return new Num(id);
+                }
                 if (notNum.size() == 1)
                     return notNum[0];
                 return new Multi(notNum, mSource->op);
             }
-            else if (mSource->op == Token::SUB || mSource->op == Token::DIV)
+            else if (mSource->op == Operator::SUB || mSource->op == Operator::DIV)
             {
                 assert(mSource->args.size() == 2);
                 Node *operand = FoldConstants(mSource->args[0]);
                 Node *invOperand = FoldConstants(mSource->args[1]);
                 if (operand->type == NodeType::NumNode && invOperand->type == NodeType::NumNode)
                 {
-                    Num *nNum = dynamic_cast<Num *>(operand);
-                    Num *nDenom = dynamic_cast<Num *>(invOperand);
-                    if (mSource->op == Token::SUB)
+                    // Num *nNum = dynamic_cast<Num *>(operand);
+                    Num *nNum = static_cast<Num *>(operand);
+                    // Num *nDenom = dynamic_cast<Num *>(invOperand);
+                    Num *nDenom = static_cast<Num *>(invOperand);
+                    if (mSource->op == Operator::SUB)
                         return new Num(nNum->val - nDenom->val);
                     else
                         return new Num(nNum->val / nDenom->val);
                 }
                 else
+                {
+                    if (mSource->op == Operator::DIV)
+                    {
+                        if (invOperand->type == NodeType::NumNode)
+                        {
+                            Num *nDenom = static_cast<Num *>(invOperand);
+                            if (nDenom->val == 1)
+                                return operand;
+                        }
+                    }
                     return new Multi(operand, invOperand, mSource->op);
+                }
             }
-            else if (mSource->op == Token::LN || mSource->op == Token::EXP || mSource->op == Token::SIN || mSource->op == Token::COS || mSource->op == Token::TAN)
+            else if (mSource->op == Operator::LN || mSource->op == Operator::EXP || mSource->op == Operator::SIN || mSource->op == Operator::COS || mSource->op == Operator::TAN)
             {
                 assert(mSource->args.size() == 1);
                 Node *simpArg = FoldConstants(mSource->args[0]);
@@ -349,22 +481,23 @@ namespace Simplify
                     return new Multi(simpArg, mSource->op);
                 else
                 {
-                    Num *nArg = dynamic_cast<Num *>(simpArg);
+                    // Num *nArg = dynamic_cast<Num *>(simpArg);
+                    Num *nArg = static_cast<Num *>(simpArg);
                     switch (mSource->op)
                     {
-                    case Token::LN:
+                    case Operator::LN:
                         return new Num(log(nArg->val));
                         break;
-                    case Token::EXP:
+                    case Operator::EXP:
                         return new Num(exp(nArg->val));
                         break;
-                    case Token::SIN:
+                    case Operator::SIN:
                         return new Num(sin(nArg->val));
                         break;
-                    case Token::COS:
+                    case Operator::COS:
                         return new Num(cos(nArg->val));
                         break;
-                    case Token::TAN:
+                    case Operator::TAN:
                         return new Num(tan(nArg->val));
                         break;
                     default:
@@ -373,21 +506,31 @@ namespace Simplify
                     }
                 }
             }
-            else if (mSource->op == Token::POW)
+            else if (mSource->op == Operator::POW)
             {
                 assert(mSource->args.size() == 2);
                 Node *base = FoldConstants(mSource->args[0]);
                 Node *power = FoldConstants(mSource->args[1]);
-                // std::cout << "base " << static_cast<int>(base->type) << " " << base->ToString() << std::endl;
-                // std::cout << "power " << static_cast<int>(power->type) << " " << power->ToString() << std::endl;
                 if (base->type == NodeType::NumNode && power->type == NodeType::NumNode)
                 {
-                    Num *nBase = dynamic_cast<Num *>(base);
-                    Num *nPower = dynamic_cast<Num *>(power);
+                    // Num *nBase = dynamic_cast<Num *>(base);
+                    Num *nBase = static_cast<Num *>(base);
+                    // Num *nPower = dynamic_cast<Num *>(power);
+                    Num *nPower = static_cast<Num *>(power);
                     return new Num(pow(nBase->val, nPower->val));
                 }
                 else
-                    return new Multi(base, power, Token::POW);
+                {
+                    if (power->type == NodeType::NumNode)
+                    {
+                        Num *nPow = static_cast<Num *>(power);
+                        if (nPow->val == 1)
+                            return base;
+                        else if (nPow->val == 0)
+                            return new Num(1);
+                    }
+                    return new Multi(base, power, Operator::POW);
+                }
             }
         }
         return source;
@@ -395,16 +538,23 @@ namespace Simplify
 
     Node *FoldAddVariables(Node *source)
     {
+        std::cout << "FoldAddVariables of: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
         {
-            Multi *mSource = dynamic_cast<Multi *>(source);
-            if (mSource->op != Token::ADD)
+            // Multi *mSource = dynamic_cast<Multi *>(source);
+            Multi *mSource = static_cast<Multi *>(source);
+            if (mSource->op != Operator::ADD)
                 return mSource;
 
             // add to this when updating a variable's coefficient
             std::unordered_map<std::string, Node *> coeff;
+
+            // add to this when a child is a MultiNode with a multiply
+            // operation but does not have any variables in it so we simply want to
+            // skip it
+            std::unordered_map<Node *, bool> doSkip;
             std::map<std::string, int> vOccurances;
 
             // add to this when not a variable
@@ -417,19 +567,20 @@ namespace Simplify
                     notVars.emplace_back(n);
                 else if (n->type == NodeType::VarNode)
                 {
-                    Var *vArg = dynamic_cast<Var *>(n);
+                    // Var *vArg = dynamic_cast<Var *>(n);
+                    Var *vArg = static_cast<Var *>(n);
                     if (coeff.find(vArg->id) != coeff.end())
-                        coeff[vArg->id] = new Multi(coeff[vArg->id], new Num(1), Token::ADD);
+                        coeff[vArg->id] = new Multi(coeff[vArg->id], new Num(1), Operator::ADD);
                     else
                         coeff[vArg->id] = new Num(1);
                 }
                 else
                 {
-                    Multi *mArg = dynamic_cast<Multi *>(n);
-
-                    if (mSource->op == Token::ADD)
+                    // Multi *mArg = dynamic_cast<Multi *>(n);
+                    Multi *mArg = static_cast<Multi *>(n);
+                    if (mSource->op == Operator::ADD)
                     {
-                        if (mArg->op != Token::MUL)
+                        if (mArg->op != Operator::MUL)
                         {
                             notVars.emplace_back(mArg);
                             continue;
@@ -445,7 +596,8 @@ namespace Simplify
                         if (m->type == NodeType::VarNode)
                         {
                             containsVar = true;
-                            Var *vChildArg = dynamic_cast<Var *>(m);
+                            // Var *vChildArg = dynamic_cast<Var *>(m);
+                            Var *vChildArg = static_cast<Var *>(m);
                             if (std::find(seenVars.begin(), seenVars.end(), vChildArg->id) == seenVars.end())
                             {
                                 seenVars.emplace_back(vChildArg->id);
@@ -454,21 +606,15 @@ namespace Simplify
                         }
                     }
                     if (!containsVar)
-                        notVars.emplace_back(n);
+                        doSkip[n] = true;
                 }
             }
-
-            std::cout << vOccurances.size() << std::endl;
 
             if (vOccurances.size() != 0)
             {
                 std::string mostFreqVar = std::max_element(std::begin(vOccurances), std::end(vOccurances), [](const std::pair<std::string, int> &p1, const std::pair<std::string, int> &p2) { return p1.second < p2.second; })->first;
-                std::cout << "mostFreqVar: " << mostFreqVar << std::endl;
                 if (coeff.find(mostFreqVar) == coeff.end())
-                {
-                    std::cout << "RUNNING " << mostFreqVar << std::endl;
                     coeff[mostFreqVar] = new Num(0.);
-                }
 
                 //------------------------------------- ITERATING THROUGH ARGUMENTS OF A CHILD NODE TO COLLECT THE MOST FREQUENTLY OCCURING VARIABLE -------------------------------------
 
@@ -477,9 +623,12 @@ namespace Simplify
                     if (p->type != NodeType::MultiNode)
                         continue;
 
-                    Multi *mArg = dynamic_cast<Multi *>(p);
+                    if (doSkip[p])
+                        continue;
 
-                    if (mArg->op != Token::MUL)
+                    // Multi *mArg = dynamic_cast<Multi *>(p);
+                    Multi *mArg = static_cast<Multi *>(p);
+                    if (mArg->op != Operator::MUL)
                         continue;
 
                     std::vector<Node *> childCoeffs;
@@ -494,7 +643,8 @@ namespace Simplify
                             childCoeffs.emplace_back(q);
                         else
                         {
-                            Var *vChildArg = dynamic_cast<Var *>(q);
+                            // Var *vChildArg = dynamic_cast<Var *>(q);
+                            Var *vChildArg = static_cast<Var *>(q);
 
                             // variable we have seen is not the most frequent variable
                             if (vChildArg->id != mostFreqVar)
@@ -514,17 +664,24 @@ namespace Simplify
                         }
                     }
 
-                    std::cout << "Data in childCoeffs: " << std::endl;
-                    for (Node *r : childCoeffs)
-                        std::cout << r->ToString() << std::endl;
+                    // std::cout << "Data in childCoeffs: " << std::endl;
+                    // for (Node *r : childCoeffs)
+                    //     std::cout << r->ToString() << std::endl;
 
-                    // std::cout<< "seenVar: " << seenVar-<< std::endl;
+                    // std::cout << "seenVar: " << seenVar << std::endl;
+
                     if (seenVar == nullptr)
-                        notVars.emplace_back(new Multi(childCoeffs, Token::MUL));
+                        notVars.emplace_back(new Multi(childCoeffs, Operator::MUL));
                     else
                     {
-                        Multi *child = new Multi(childCoeffs, Token::MUL);
-                        coeff[seenVar->id] = new Multi(child, coeff[seenVar->id], Token::ADD);
+                        Multi *child;
+                        if (childCoeffs.size() == 1)
+                            coeff[seenVar->id] = new Multi(coeff[seenVar->id], childCoeffs[0], Operator::ADD);
+                        else
+                        {
+                            child = new Multi(childCoeffs, Operator::MUL);
+                            coeff[seenVar->id] = new Multi(child, coeff[seenVar->id], Operator::ADD);
+                        }
                     }
                 }
             }
@@ -533,13 +690,24 @@ namespace Simplify
             // for (auto &[var, num] : vOccurances)
             //     std::cout << var << " " << num << std::endl;
 
-            // std::cout << "Data in notVar: " << std::endl;
-            // for (Node *o : notVars)
-            //     std::cout << o->ToString() << std::endl;
+            std::cout << "Data in notVar: " << std::endl;
+            for (Node *o : notVars)
+                std::cout << o->ToString() << std::endl;
 
+            std::cout << "Data in doSkip " << std::endl;
+            for (auto &[node, skip] : doSkip)
+            {
+                std::cout << node->ToString() << " " << skip << std::endl;
+            }
+
+            for (Node *n : mSource->args)
+            {
+                if (doSkip[n])
+                    notVars.emplace_back(n);
+            }
             for (auto &[var, coefficient] : coeff)
             {
-                notVars.emplace_back(new Multi(coefficient, new Var(var), Token::MUL));
+                notVars.emplace_back(new Multi(coefficient, new Var(var), Operator::MUL));
             }
             if (notVars.size() == 1)
                 return FoldConstants(notVars[0]);
@@ -553,12 +721,15 @@ namespace Simplify
 
     Node *FoldMulVariables(Node *source)
     {
+        std::cout << "FoldMulVariables of: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
         {
-            Multi *mSource = dynamic_cast<Multi *>(source);
-            if (mSource->op != Token::MUL)
+            // Multi *mSource = dynamic_cast<Multi *>(source);
+            Multi *mSource = static_cast<Multi *>(source);
+
+            if (mSource->op != Operator::MUL)
                 return mSource;
 
             std::unordered_map<std::string, Node *> coeff;
@@ -569,15 +740,19 @@ namespace Simplify
                 if (n->type != NodeType::MultiNode)
                 {
                     if (coeff.find(n->ToString()) != coeff.end())
-                        coeff[n->ToString()] = new Multi(coeff[n->ToString()], new Num(1), Token::ADD);
+                        coeff[n->ToString()] = new Multi(coeff[n->ToString()], new Num(1), Operator::ADD);
                     else
                         coeff[n->ToString()] = new Num(1);
                 }
                 else
                 {
-                    Multi *mArg = dynamic_cast<Multi *>(n);
-                    if (mArg->op != Token::POW)
+                    // Multi *mArg = dynamic_cast<Multi *>(n);
+                    Multi *mArg = static_cast<Multi *>(n);
+                    if (mArg->op != Operator::POW)
+                    {
                         notVars.emplace_back(mArg);
+                        continue;
+                    }
 
                     assert(mArg->args.size() == 2);
                     if (mArg->args[0]->type == NodeType::MultiNode)
@@ -588,7 +763,7 @@ namespace Simplify
                     else
                     {
                         if (coeff.find(mArg->args[0]->ToString()) != coeff.end())
-                            coeff[mArg->args[0]->ToString()] = new Multi(coeff[mArg->args[0]->ToString()], mArg->args[1], Token::ADD);
+                            coeff[mArg->args[0]->ToString()] = new Multi(coeff[mArg->args[0]->ToString()], mArg->args[1], Operator::ADD);
                         else
                             coeff[mArg->args[0]->ToString()] = mArg->args[1];
                     }
@@ -601,64 +776,606 @@ namespace Simplify
                 double candidate = 0;
                 num >> candidate;
                 if (!num.fail() && num.eof())
-                    notVars.emplace_back(new Multi(new Num(candidate), pow, Token::POW));
+                {
+                    if (pow->type == NodeType::NumNode)
+                    {
+                        Num *numPow = static_cast<Num *>(pow);
+                        if (numPow->val == 1)
+                            notVars.emplace_back(new Num(candidate));
+                        else
+                            notVars.emplace_back(new Multi(new Num(candidate), pow, Operator::POW));
+                    }
+                    else
+                        notVars.emplace_back(new Multi(new Num(candidate), pow, Operator::POW));
+                }
                 else
-                    notVars.emplace_back(new Multi(new Var(base), pow, Token::POW));
+                {
+                    if (pow->type == NodeType::NumNode)
+                    {
+                        Num *numPow = static_cast<Num *>(pow);
+                        if (numPow->val == 1)
+                            notVars.emplace_back(new Var(base));
+                        else
+                            notVars.emplace_back(new Multi(new Var(base), pow, Operator::POW));
+                    }
+                    else
+                        notVars.emplace_back(new Multi(new Var(base), pow, Operator::POW));
+                }
             }
 
             if (notVars.size() == 1)
                 return FoldConstants(notVars[0]);
             else
-                return FoldConstants(new Multi(notVars, Token::MUL));
+                return FoldConstants(new Multi(notVars, Operator::MUL));
         }
     }
 
     Node *FoldVariables(Node *source)
     {
-        // std::cout << "FoldVariables: " << source->ToString() << std::endl;
+        std::cout << "FoldVariables: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
         {
-            Multi *mSource = dynamic_cast<Multi *>(source);
-            if (mSource->op == Token::ADD)
-            {
-                Node *folded = FoldAddVariables(mSource);
-                if (folded->type != NodeType::MultiNode)
-                    return folded;
+            // Multi *mSource = dynamic_cast<Multi *>(source);
+            Multi *mSource = static_cast<Multi *>(source);
+            Node *folded;
+            if (mSource->op == Operator::ADD)
+                folded = FoldAddVariables(mSource);
+            else
+                folded = FoldMulVariables(mSource);
 
-                Multi *mFolded = dynamic_cast<Multi *>(folded);
-                Multi *res = new Multi(mFolded->op);
+            if (folded->type != NodeType::MultiNode)
+                return folded;
 
-                for (Node *n : mFolded->args)
-                    res->AddArg(FoldVariables(n));
-                return res;
-            }
-            else if (mSource->op == Token::MUL)
-            {
-                Node *folded = FoldAddVariables(mSource);
-                if (folded->type != NodeType::MultiNode)
-                    return folded;
+            // Multi *mFolded = dynamic_cast<Multi *>(folded);
+            Multi *mFolded = static_cast<Multi *>(folded);
+            Multi *res = new Multi(mFolded->op);
 
-                Multi *mFolded = dynamic_cast<Multi *>(folded);
-                Multi *res = new Multi(mFolded->op);
-
-                for (Node *n : mFolded->args)
-                    res->AddArg(FoldVariables(n));
-                return res;
-            }
+            for (Node *n : mFolded->args)
+                res->AddArg(FoldVariables(n));
+            return res;
         }
         return source;
     }
 
-    Node *SimplifyMultiplication(Multi *source)
+    Node *SimplifySubtraction(Multi *source)
     {
-        return source;
+        std::cout << "SimplifySubtraction of: " << source->ToString() << std::endl;
+        if (source->op != Operator::SUB)
+            return source;
+
+        assert(source->args.size() == 2);
+
+        Node *additive = source->args[0];
+        Node *subtractive = source->args[1];
+        Multi *simpAdd = new Multi(Operator::ADD);
+        Multi *simpSub = new Multi(Operator::ADD);
+
+        // if they are equal, can straight away return 0, no need to do the more indepth checks
+        if (*additive == *subtractive)
+            return new Num(0.);
+
+        // one of them is a Multi and the other is not
+        else if ((additive->type == NodeType::MultiNode && subtractive->type != NodeType::MultiNode) || (additive->type != NodeType::MultiNode && subtractive->type == NodeType::MultiNode))
+        {
+            Multi *m;
+            Node *notM;
+
+            if (additive->type == NodeType::MultiNode && subtractive->type != NodeType::MultiNode)
+            {
+                m = static_cast<Multi *>(additive);
+                notM = subtractive;
+            }
+            else
+            {
+                m = static_cast<Multi *>(subtractive);
+                notM = additive;
+            }
+
+            if (m->op != Operator::ADD)
+                return source;
+
+            bool isConsumed = false;
+            for (Node *a : m->args)
+            {
+                if (*a == *notM && !isConsumed)
+                {
+                    isConsumed = true;
+                    continue;
+                }
+                else
+                {
+                    if (additive->type == NodeType::MultiNode && subtractive->type != NodeType::MultiNode)
+                        simpAdd->AddArg(a);
+                    else
+                        simpSub->AddArg(a);
+                }
+            }
+            if (!isConsumed)
+            {
+                if (additive->type == NodeType::MultiNode && subtractive->type != NodeType::MultiNode)
+                    simpAdd->AddArg(notM);
+                else
+                    simpSub->AddArg(notM);
+            }
+        }
+
+        // both are multi nodes
+        else
+        {
+            Multi *add = static_cast<Multi *>(additive);
+            Multi *sub = static_cast<Multi *>(subtractive);
+
+            if (add->op != Operator::ADD || sub->op != Operator::ADD)
+                return source;
+
+            // one of the 2 is a function node no need to check the case that both
+            // are function nodes since that is handled up top
+            if (IsFunc(add) ^ IsFunc(sub))
+            {
+                Multi *func;
+                Multi *notFunc;
+                if (IsFunc(add))
+                {
+                    func = add;
+                    notFunc = sub;
+                }
+                else
+                {
+                    func = sub;
+                    notFunc = add;
+                }
+                bool isConsumed = false;
+                for (Node *a : notFunc->args)
+                {
+                    if ((*a == *func) && !isConsumed)
+                    {
+                        isConsumed = true;
+                        continue;
+                    }
+                    else
+                    {
+                        if (func == add)
+                            simpSub->AddArg(a);
+                        else
+                            simpAdd->AddArg(a);
+                    }
+                }
+                if (!isConsumed)
+                {
+                    if (func == add)
+                        simpSub->AddArg(func);
+                    else
+                        simpAdd->AddArg(func);
+                }
+            }
+            else
+            {
+
+                // neither of the 2 are function nodes themselves
+                std::unordered_map<Node *, bool> isAddConsumed;
+                std::unordered_map<Node *, bool> isSubConsumed;
+
+                if (add->op != Operator::ADD || sub->op != Operator::ADD)
+                    return source;
+
+                for (Node *a : add->args)
+                {
+                    for (Node *s : sub->args)
+                    {
+
+                        if (*a == *s && !isSubConsumed[s])
+                        {
+                            isAddConsumed[a] = true;
+                            isSubConsumed[s] = true;
+                            break;
+                        }
+                    }
+                }
+
+                // std::cout << "Data in isAddConsumed: " << std::endl;
+                // for (auto &[n, b] : isAddConsumed)
+                //     std::cout << n->ToString() << " " << b << std::endl;
+
+                // std::cout << "Data in isSubConsumed: " << std::endl;
+                // for (auto &[n, b] : isSubConsumed)
+                //     std::cout << n->ToString() << " " << b << std::endl;
+
+                for (Node *p : add->args)
+                {
+                    if (!isAddConsumed[p])
+                        simpAdd->AddArg(p);
+                }
+                for (Node *q : sub->args)
+                {
+                    if (!isSubConsumed[q])
+                        simpSub->AddArg(q);
+                }
+            }
+        }
+
+        if (simpAdd->args.size() == 0 && simpSub->args.size() == 0)
+            return new Num(0.);
+        else if (simpAdd->args.size() == 0 && simpSub->args.size() == 1)
+            return FoldConstants(new Multi(new Num(-1), simpSub->args[0], Operator::MUL));
+        else if (simpAdd->args.size() == 0 && simpSub->args.size() > 1)
+            return FoldConstants(new Multi(new Num(-1), simpSub, Operator::MUL));
+        else if (simpAdd->args.size() == 1 && simpSub->args.size() == 0)
+            return FoldConstants(simpAdd->args[0]);
+        else if (simpAdd->args.size() == 1 && simpSub->args.size() == 1)
+            return FoldConstants(new Multi(simpAdd->args[0], simpSub->args[0], Operator::SUB));
+        else if (simpAdd->args.size() == 1 && simpSub->args.size() > 1)
+            return FoldConstants(new Multi(simpAdd->args[0], simpSub, Operator::SUB));
+        else if (simpAdd->args.size() > 1 && simpSub->args.size() == 0)
+            return FoldConstants(simpAdd);
+        else if (simpAdd->args.size() > 1 && simpSub->args.size() == 1)
+            return FoldConstants(new Multi(simpAdd, simpSub->args[0], Operator::SUB));
+        else
+            return FoldConstants(new Multi(simpAdd, simpSub, Operator::SUB));
     }
 
-    Node *SimplifyAddition(Multi *source)
+    Node *SimplifyDivision(Multi *source)
     {
-        return source;
+        std::cout << "SimplifyDivision of: " << source->ToString() << std::endl;
+        if (source->op != Operator::DIV)
+            return source;
+
+        assert(source->args.size() == 2);
+
+        Node *numerator = source->args[0];
+        Node *denominator = source->args[1];
+        Multi *simpNum = new Multi(Operator::MUL);
+        Multi *simpDenom = new Multi(Operator::MUL);
+
+        if (*numerator == *denominator)
+            return new Num(1);
+
+        // exactly one of the numerator or the denominator is a MultiNode
+        else if ((numerator->type == NodeType::MultiNode && denominator->type != NodeType::MultiNode) || (denominator->type == NodeType::MultiNode && numerator->type != NodeType::MultiNode))
+        {
+            Multi *mNode;
+            Node *notM;
+            std::vector<Multi *> seenPowers;
+            if (numerator->type == NodeType::MultiNode && denominator->type != NodeType::MultiNode)
+            {
+                mNode = static_cast<Multi *>(numerator);
+                notM = static_cast<Multi *>(denominator);
+            }
+            else
+            {
+                mNode = static_cast<Multi *>(denominator);
+                notM = static_cast<Multi *>(numerator);
+            }
+
+            bool isConsumed = false;
+            if (mNode->op != Operator::POW)
+            {
+                if (mNode->op != Operator::MUL)
+                    return new Multi(mNode, notM, Operator::DIV);
+                for (Node *n : mNode->args)
+                {
+                    if (n->type == NodeType::MultiNode)
+                    {
+                        Multi *mArg = static_cast<Multi *>(n);
+                        if (mArg->op == Operator::POW)
+                        {
+                            assert(mArg->args.size() == 2);
+                            seenPowers.emplace_back(mArg);
+                            continue;
+                        }
+                    }
+                    if (*n == *notM && !isConsumed)
+                        isConsumed = true;
+                    else
+                    {
+                        if (numerator->type == NodeType::MultiNode)
+                            simpNum->AddArg(n);
+                        else
+                            simpDenom->AddArg(n);
+                    }
+                }
+            }
+            else
+                seenPowers.emplace_back(mNode);
+
+            for (Multi *p : seenPowers)
+            {
+                // std::cout << "mArg " << p->ToString() << std::endl;
+                if (*p->args[0] == *notM && !isConsumed)
+                {
+                    isConsumed = true;
+                    if (numerator->type == NodeType::MultiNode)
+                        simpNum->AddArg(new Multi(p->args[0], new Multi(p->args[1], new Num(1), Operator::SUB), Operator::POW));
+                    else
+                        simpDenom->AddArg(new Multi(p->args[0], new Multi(p->args[1], new Num(1), Operator::SUB), Operator::POW));
+                }
+                else
+                {
+                    if (numerator->type == NodeType::MultiNode)
+                        simpNum->AddArg(p);
+                    else
+                        simpDenom->AddArg(p);
+                }
+            }
+
+            if (!isConsumed)
+            {
+
+                if (numerator->type == NodeType::MultiNode)
+                    simpDenom->AddArg(notM);
+                else
+                    simpNum->AddArg(notM);
+            }
+        }
+
+        // both the numerator and the denominator are MultiNodes
+        else
+        {
+            Multi *num = static_cast<Multi *>(numerator);
+            Multi *denom = static_cast<Multi *>(denominator);
+
+            // both are functions
+            if (IsFunc(num) && IsFunc(denom))
+            {
+                if (*num == *denom)
+                    return new Num(1);
+                else
+                    return source;
+            }
+
+            // exactly one is a function
+            else if (IsFunc(num) || IsFunc(denom))
+            {
+                Multi *func;
+                Multi *notFunc;
+                if (IsFunc(num))
+                {
+                    func = num;
+                    notFunc = denom;
+                }
+                else
+                {
+                    func = denom;
+                    notFunc = num;
+                }
+                // std::cout << "func: " << func->ToString() << std::endl;
+                // std::cout << "notFunc: " << notFunc->ToString() << std::endl;
+
+                if (notFunc->op != Operator::POW && notFunc->op != Operator::MUL)
+                    return source;
+
+                if (notFunc->op == Operator::POW)
+                {
+                    if (*notFunc->args[0] == *func)
+                    {
+                        if (func == num)
+                            simpDenom->AddArg(new Multi(func, new Multi(notFunc->args[1], new Num(1), Operator::SUB), Operator::POW));
+                        else
+                            simpNum->AddArg(new Multi(func, new Multi(notFunc->args[1], new Num(1), Operator::SUB), Operator::POW));
+                    }
+                }
+                else
+                {
+                    bool isConsumed = false;
+                    std::vector<Multi *> seenPowers;
+                    for (Node *n : notFunc->args)
+                    {
+                        if (n->type == NodeType::MultiNode)
+                        {
+                            Multi *mArg = static_cast<Multi *>(n);
+                            if (mArg->op == Operator::POW)
+                            {
+                                assert(mArg->args.size() == 2);
+                                seenPowers.emplace_back(mArg);
+                                continue;
+                            }
+                        }
+                        if (*n == *func && !isConsumed)
+                        {
+                            isConsumed = true;
+                            continue;
+                        }
+                        else
+                        {
+                            if (func == num)
+                                simpDenom->AddArg(n);
+                            else
+                                simpNum->AddArg(n);
+                        }
+                    }
+
+                    for (Multi *p : seenPowers)
+                    {
+                        if (*p->args[0] == *func && !isConsumed)
+                        {
+                            if (func == num)
+                                simpDenom->AddArg(new Multi(func, new Multi(notFunc->args[1], new Num(1), Operator::SUB), Operator::POW));
+                            else
+                                simpNum->AddArg(new Multi(func, new Multi(notFunc->args[1], new Num(1), Operator::SUB), Operator::POW));
+                            isConsumed = true;
+                        }
+                    }
+
+                    if (!isConsumed)
+                    {
+                        if (func == num)
+                            simpNum->AddArg(func);
+                        else
+                            simpDenom->AddArg(func);
+                    }
+                }
+            }
+
+            // both of them are not functions
+            else
+            {
+                std::unordered_map<Node *, bool> isNumConsumed;
+                std::unordered_map<Node *, bool> isDenomConsumed;
+                bool isNumNotPower = true;
+                bool isDenomNotPower = true;
+
+                std::vector<Multi *> seenNumPowers;
+                std::vector<Multi *> seenDenomPowers;
+
+                // both the numerator and denominator are powers
+                if (num->op == Operator::POW && denom->op == Operator::POW)
+                {
+                    assert(num->args.size() == 2 && denom->args.size() == 2);
+                    if (*num->args[0] == *denom->args[0])
+                        return new Multi(num->args[0], new Multi(num->args[1], denom->args[1], Operator::SUB), Operator::POW);
+                }
+
+                //exactly one is a power since we must have rejected the condition above
+                else if (num->op == Operator::POW || denom->op == Operator::POW)
+                {
+                    if (num->op == Operator::POW)
+                    {
+                        if (denom->op != Operator::MUL)
+                            return source;
+                        isNumNotPower = false;
+                        seenNumPowers.emplace_back(num);
+                    }
+                    else
+                    {
+                        if (num->op != Operator::MUL)
+                            return source;
+                        isDenomNotPower = false;
+                        seenDenomPowers.emplace_back(denom);
+                    }
+                }
+
+                // if (num->op != Operator::MUL || denom->op != Operator::MUL)
+                //     return source;
+
+                // neither of them are powers
+                for (Node *n : num->args)
+                {
+                    if (n->type == NodeType::MultiNode)
+                    {
+                        Multi *mNumArg = static_cast<Multi *>(n);
+                        if (mNumArg->op == Operator::POW)
+                        {
+                            seenNumPowers.emplace_back(mNumArg);
+                            continue;
+                        }
+                    }
+                    for (Node *d : denom->args)
+                    {
+                        if (*n == *d && !isDenomConsumed[d])
+                        {
+                            isNumConsumed[n] = true;
+                            isDenomConsumed[d] = true;
+                            break;
+                        }
+                    }
+                }
+
+                for (Node *m : denom->args)
+                {
+                    if (m->type == NodeType::MultiNode)
+                    {
+                        Multi *mDenomArg = static_cast<Multi *>(m);
+                        if (mDenomArg->op == Operator::POW)
+                        {
+                            seenDenomPowers.emplace_back(mDenomArg);
+                        }
+                    }
+                }
+
+                // std::cout << "Data in isNumConsumed: " << std::endl;
+                // for (auto &[n, b] : isNumConsumed)
+                //     std::cout << n->ToString() << " " << b << std::endl;
+
+                // std::cout << "Data in isDenomConsumed: " << std::endl;
+                // for (auto &[n, b] : isDenomConsumed)
+                //     std::cout << n->ToString() << " " << b << std::endl;
+
+                // std::cout << "Data in seenNumPowers" << std::endl;
+                // for (Multi *m : seenNumPowers)
+                //     std::cout << m->ToString() << std::endl;
+
+                // std::cout << "Data in seenDenomPowers" << std::endl;
+                // for (Multi *m : seenDenomPowers)
+                //     std::cout << m->ToString() << std::endl;
+
+                for (Multi *numPow : seenNumPowers)
+                {
+                    for (Multi *denomPow : seenDenomPowers)
+                    {
+                        if (*numPow->args[0] == *denomPow->args[0])
+                        {
+                            simpNum->AddArg(new Multi(numPow->args[0], new Multi(numPow->args[1], denomPow->args[1], Operator::SUB), Operator::POW));
+                            isNumConsumed[numPow] = true;
+                            isDenomConsumed[denomPow] = true;
+                        }
+                    }
+                    for (Node *d : denom->args)
+                    {
+                        if (*numPow->args[0] == *d && !isDenomConsumed[d] && !isNumConsumed[numPow])
+                        {
+                            simpNum->AddArg(new Multi(d, new Multi(numPow->args[1], new Num(1), Operator::SUB), Operator::POW));
+                            isNumConsumed[numPow] = true;
+                            isDenomConsumed[d] = true;
+                        }
+                    }
+                }
+
+                for (Multi *denomPow : seenDenomPowers)
+                {
+                    for (Node *n : num->args)
+                    {
+                        if (*denomPow->args[0] == *n && !isNumConsumed[n] && !isDenomConsumed[denomPow])
+                        {
+                            // std::cout << "RUNNING" << std::endl;
+                            simpDenom->AddArg(new Multi(n, new Multi(denomPow->args[1], new Num(1), Operator::SUB), Operator::POW));
+                            isNumConsumed[n] = true;
+                            isDenomConsumed[denomPow] = true;
+                        }
+                    }
+                }
+
+                if (isNumNotPower)
+                {
+                    for (Node *p : num->args)
+                    {
+                        if (!isNumConsumed[p])
+                            simpNum->AddArg(p);
+                    }
+                }
+                if (isDenomNotPower)
+                {
+                    for (Node *q : denom->args)
+                    {
+                        if (!isDenomConsumed[q])
+                            simpDenom->AddArg(q);
+                    }
+                }
+            }
+        }
+
+        if (simpNum->args.size() == 0 && simpDenom->args.size() == 0)
+            return FoldConstants(new Num(1));
+        else if (simpNum->args.size() == 0 && simpDenom->args.size() == 1)
+            return FoldConstants(new Multi(new Num(1), simpDenom->args[0], Operator::DIV));
+        else if (simpNum->args.size() == 0 && simpDenom->args.size() > 1)
+            return FoldConstants(new Multi(new Num(1), simpDenom, Operator::DIV));
+        else if (simpNum->args.size() == 1 && simpDenom->args.size() == 0)
+            return FoldConstants(simpNum->args[0]);
+        else if (simpNum->args.size() == 1 && simpDenom->args.size() == 1)
+            return FoldConstants(new Multi(simpNum->args[0], simpDenom->args[0], Operator::DIV));
+        else if (simpNum->args.size() == 1 && simpDenom->args.size() > 1)
+            return FoldConstants(new Multi(simpNum->args[0], simpDenom, Operator::DIV));
+        else if (simpNum->args.size() > 1 && simpDenom->args.size() == 0)
+            return FoldConstants(simpNum);
+        else if (simpNum->args.size() > 1 && simpDenom->args.size() == 1)
+            return FoldConstants(new Multi(simpNum, simpDenom->args[0], Operator::DIV));
+        else
+            return FoldConstants(new Multi(simpNum, simpDenom, Operator::DIV));
     }
 
+    bool IsFunc(Multi *source)
+    {
+        return (source->op != Operator::ADD && source->op != Operator::SUB && source->op != Operator::MUL && source->op != Operator::DIV && source->op != Operator::POW);
+    }
 } // namespace Simplify

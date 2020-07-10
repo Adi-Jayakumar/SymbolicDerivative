@@ -1,8 +1,9 @@
+#pragma once
 #include "node.h"
 #include <cassert>
+#include <iostream>
 #include <map>
 #include <string>
-#pragma once
 
 namespace DOT
 {

@@ -1,6 +1,4 @@
 #include "parser.h"
-#include <iostream>
-using namespace std;
 
 Parser::Parser(std::string _file)
 {
@@ -28,9 +26,9 @@ Node *Parser::Parse(int &i)
         i++;
         Node *rhs = ParseMul(i);
         if (op == Token::SUB)
-            rhs = new Multi(new Num(-1), rhs, Token::MUL);
+            rhs = new Multi(new Num(-1), rhs, Utility::TokenToOperator(Token::MUL));
 
-        lhs = new Multi(lhs, rhs, Token::ADD);
+        lhs = new Multi(lhs, rhs, Operator::ADD);
     }
 }
 
@@ -54,9 +52,9 @@ Node *Parser::ParseMul(int &i)
         Node *rhs = ParseInd(i);
 
         if (op == Token::DIV)
-            rhs = new Multi(new Num(1), rhs, Token::DIV);
+            rhs = new Multi(new Num(1), rhs, Operator::DIV);
 
-        lhs = new Multi(lhs, rhs, Token::MUL);
+        lhs = new Multi(lhs, rhs, Operator::MUL);
     }
 }
 
@@ -76,7 +74,7 @@ Node *Parser::ParseInd(int &i)
 
         i++;
         Node* rhs = ParseUnit(i);
-        lhs = new Multi(lhs, rhs, Token::POW);
+        lhs = new Multi(lhs, rhs, Operator::POW);
     }
 }
 
@@ -92,7 +90,7 @@ Node *Parser::ParseUnit(int &i)
     else if (tk.tokens[i].t == Token::SUB)
     {
         i++;
-        return new Multi(new Num(-1), ParseUnit(i), Token::MUL);
+        return new Multi(new Num(-1), ParseUnit(i), Operator::MUL);
     }
     else if (tk.tokens[i].t == Token::VAR)
         return new Var(tk.tokens[i].var);
@@ -106,7 +104,7 @@ Node *Parser::ParseUnit(int &i)
     }
     else if (tk.tokens[i].t == Token::LN || tk.tokens[i].t == Token::EXP || tk.tokens[i].t == Token::SIN || tk.tokens[i].t == Token::COS || tk.tokens[i].t == Token::TAN)
     {
-        Token f = tk.tokens[i].t;
+        Operator f = Utility::TokenToOperator(tk.tokens[i].t);
         i++;
         return new Multi(ParseUnit(i), f);
     }

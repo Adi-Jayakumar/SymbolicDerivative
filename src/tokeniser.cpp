@@ -1,10 +1,4 @@
 #include "tokeniser.h"
-#include <iostream>
-#include <fstream>
-#include <unordered_map>
-
-using namespace std;
-
 
 Tokeniser::Tokeniser(std::string _file)
 {

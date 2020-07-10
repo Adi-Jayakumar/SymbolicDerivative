@@ -1,5 +1,5 @@
 #include "dot.h"
-#include <iostream>
+
 
 namespace DOT
 {
@@ -15,7 +15,8 @@ namespace DOT
         else
         {
             assert(n->type == NodeType::MultiNode);
-            Multi *m = dynamic_cast<Multi *>(n);
+            // Multi *m = dynamic_cast<Multi *>(n);
+            Multi *m = static_cast<Multi *>(n);
             int locLabel = label;
             for (Node *n : m->args)
             {
