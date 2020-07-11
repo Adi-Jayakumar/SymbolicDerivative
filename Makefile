@@ -1,4 +1,3 @@
-
 CC		:= g++ 
 C_FLAGS := -g -std=c++17 -O3 -Wall -Wextra -march=native -fext-numeric-literals -fopenmp 
 

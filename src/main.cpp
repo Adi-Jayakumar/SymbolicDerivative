@@ -11,21 +11,48 @@ int main()
 
     Parser p = Parser("test.txt");
     p.tk.Tokenise();
-    // for (Unit u : p.tk.tokens)
-    // {
-    //     std::cout << "Token: " << static_cast<int>(u.t) << " "
-    //               << "Value: " << u.val << " "
-    //               << "Var: " << u.var << " "
-    //               << "Func: " << u.func << std::endl;
-    // }
 
-    Multi* m = new Multi(new Var("x"), new Num(1), Operator::ADD);
-    Multi* n = new Multi(new Num(1), new Num(1), Operator::ADD);
-    std::cout << (*n == *m) << std::endl;
+    int i = 0;
+    Node *n = p.Parse(i);
+    std::cout << "parsed: " << n->ToString() << std::endl;
+    
+    Multi* mParsed = static_cast<Multi*>(n);
+    mParsed = Simplify::Unroll(mParsed);
 
-    // int i = 0;
-    // Node *n = p.Parse(i);
-    // std::cout << "parsed: " << n->ToString() << std::endl;
+    std::cout << "mParsed: " << mParsed->ToString() << std::endl;
+
+    Node* simpAdd = Simplify::SimplifyAddition(mParsed);
+    std::cout << "addition simplified: " << simpAdd->ToString() << std::endl;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Node *simplify = Simplify::Simplify(n);
     // std::cout << "simplified: " << simplify->ToString() << std::endl;

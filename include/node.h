@@ -19,7 +19,6 @@ struct Node
     virtual std::string ToString() = 0;
     virtual std::string SelfToString() = 0;
     friend bool operator==(const Node& lhs, const Node & rhs);
-    virtual bool Equals(Node *rhs) = 0;
     virtual ~Node() = 0;
 };
 
@@ -30,7 +29,6 @@ struct Num : Node
     Num(Num *n) : Num(n->val) {}
     std::string ToString();
     std::string SelfToString();
-    bool Equals(Node *rhs);
 };
 
 struct Var : Node
@@ -40,7 +38,6 @@ struct Var : Node
     Var(Var *v) : Var(v->id) {}
     std::string ToString();
     std::string SelfToString();
-    bool Equals(Node *rhs);
 };
 
 struct Multi : Node
@@ -56,5 +53,4 @@ struct Multi : Node
     void AddArg(Node *a);
     std::string ToString();
     std::string SelfToString();
-    bool Equals(Node *rhs);
 };

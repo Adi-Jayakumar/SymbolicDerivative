@@ -5,7 +5,7 @@ namespace Simplify
 
     Node *Simplify(Node *source)
     {
-        std::cout << "Simplify " << source->ToString() << std::endl;
+        // std::cout << "Simplify " << source->ToString() << std::endl;
 
         // no simplifications can be done to a number/variable
         if (source->type == NodeType::NumNode || source->type == NodeType::VarNode)
@@ -73,7 +73,7 @@ namespace Simplify
 
     Multi *Unroll(Multi *source)
     {
-        std::cout << "Unroll: " << source->ToString() << " With op: " << static_cast<int>(source->op) << std::endl;
+        // std::cout << "Unroll: " << source->ToString() << " With op: " << static_cast<int>(source->op) << std::endl;
         if (source->op == Operator::POW)
             return source;
         else if (IsFunc(source))
@@ -376,7 +376,7 @@ namespace Simplify
 
     Node *CanonicalForm(Node *source)
     {
-        std::cout << "CanonicalForm of: " << source->ToString() << std::endl;
+        // std::cout << "CanonicalForm of: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
@@ -401,7 +401,7 @@ namespace Simplify
 
     Node *FoldConstants(Node *source)
     {
-        std::cout << "Fold constants of: " << source->ToString() << std::endl;
+        // std::cout << "Fold constants of: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
@@ -536,192 +536,141 @@ namespace Simplify
         return source;
     }
 
-    Node *FoldAddVariables(Node *source)
+    Node *SimplifyAddition(Node *source)
     {
-        std::cout << "FoldAddVariables of: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
         {
-            // Multi *mSource = dynamic_cast<Multi *>(source);
             Multi *mSource = static_cast<Multi *>(source);
             if (mSource->op != Operator::ADD)
-                return mSource;
+                return source;
 
-            // add to this when updating a variable's coefficient
-            std::unordered_map<std::string, Node *> coeff;
+            Multi *res = new Multi(Operator::ADD);
+            std::unordered_map<Node *, Node *> firstPassCoeffs;
+            std::vector<Multi *> notVisited;
 
-            // add to this when a child is a MultiNode with a multiply
-            // operation but does not have any variables in it so we simply want to
-            // skip it
-            std::unordered_map<Node *, bool> doSkip;
-            std::map<std::string, int> vOccurances;
-
-            // add to this when not a variable
-            std::vector<Node *> notVars;
-
-            //------------------------------------- ITERATING THROUGH THE ARGUMENTS OF THE ROOT NODE -------------------------------------
+            //------------------------------------------ COLLECTING ANY NODES THAT ARE EQUAL (1 DEEP CHECKING) ------------------------------------------
             for (Node *n : mSource->args)
             {
-                if (n->type == NodeType::NumNode)
-                    notVars.emplace_back(n);
-                else if (n->type == NodeType::VarNode)
+                if (n->type == NodeType::MultiNode)
                 {
-                    // Var *vArg = dynamic_cast<Var *>(n);
-                    Var *vArg = static_cast<Var *>(n);
-                    if (coeff.find(vArg->id) != coeff.end())
-                        coeff[vArg->id] = new Multi(coeff[vArg->id], new Num(1), Operator::ADD);
-                    else
-                        coeff[vArg->id] = new Num(1);
+                    Multi *mArg = static_cast<Multi *>(n);
+                    if (mArg->op == Operator::MUL)
+                    {
+                        notVisited.emplace_back(mArg);
+                        continue;
+                    }
                 }
+                else if (n->type == NodeType::NumNode)
+                {
+                    res->AddArg(n);
+                    continue;
+                }
+                Node *seen = nullptr;
+
+                for (std::pair<Node *, Node *> element : firstPassCoeffs)
+                {
+                    if (*element.first == *n)
+                        seen = element.first;
+                }
+                // we have seen this argument before
+                if (seen != nullptr)
+                    firstPassCoeffs[seen] = new Multi(firstPassCoeffs[seen], new Num(1), Operator::ADD);
+                // this is the first time we have seen it
+                else
+                    firstPassCoeffs[n] = new Num(1);
+            }
+
+            std::cout << "data in firstPassCoeffs after the first pass:" << std::endl;
+            for (auto &[val, coeff] : firstPassCoeffs)
+                std::cout << val->ToString() << " " << coeff->ToString() << std::endl;
+
+            std::map<Node *, int> nOccurances;
+            //------------------------------------------ COUNTING OCCURANCES OF NON-NUMBER NODES ------------------------------------------
+            for (Multi *mArg : notVisited)
+            {
+                for (Node *m : mArg->args)
+                {
+                    bool isSeenBef = false;
+                    for (std::pair<Node *, Node *> element : firstPassCoeffs)
+                    {
+                        if (*element.first == *m)
+                        {
+                            nOccurances[element.first]++;
+                            isSeenBef = true;
+                        }
+                    }
+                    if (!isSeenBef && !(m->type == NodeType::NumNode))
+                    {
+                        Node *seen = nullptr;
+                        for (std::pair<Node *, int> element : nOccurances)
+                        {
+                            if (*element.first == *m)
+                                seen = element.first;
+                        }
+                        if (seen != nullptr)
+                            nOccurances[seen]++;
+                        else if (m->type != NodeType::NumNode)
+                            nOccurances[m]++;
+                    }
+                }
+            }
+
+            Node *mostFreq = std::max_element(std::begin(nOccurances), std::end(nOccurances), [](const std::pair<Node *, int> &p1, const std::pair<Node *, int> &p2) { return p1.second < p2.second; })->first;
+            std::cout << "mostFreq: " << mostFreq->ToString() << std::endl;
+            if (firstPassCoeffs.find(mostFreq) == firstPassCoeffs.end())
+                firstPassCoeffs[mostFreq] = new Num(0.);
+
+            //------------------------------------------ COLLECTING THE MOST FREQUENTLY OCCURING NODE ------------------------------------------
+
+            std::vector<Node *> noFreq;
+
+            for (Multi *mArg : notVisited)
+            {
+                // most frequent node IS NOT in this node
+                if (std::find_if(mArg->args.begin(), mArg->args.end(), [mostFreq](const Node *n) { return *mostFreq == *n; }) == mArg->args.end())
+                    noFreq.emplace_back(mArg);
+                // most frequent node IS in this node
                 else
                 {
-                    // Multi *mArg = dynamic_cast<Multi *>(n);
-                    Multi *mArg = static_cast<Multi *>(n);
-                    if (mSource->op == Operator::ADD)
+                    std::vector<Node *> childCoeff;
+                    for (Node *p : mArg->args)
                     {
-                        if (mArg->op != Operator::MUL)
-                        {
-                            notVars.emplace_back(mArg);
+                        if (*p == *mostFreq)
                             continue;
-                        }
+                        childCoeff.emplace_back(p);
                     }
-
-                    std::vector<std::string> seenVars;
-                    bool containsVar = false;
-
-                    //------------------------------------- ITERATING THROUGH ARGUMENTS OF A CHILD NODE TO COUNT THE VARIABLE OCCURANCES -------------------------------------
-                    for (Node *m : mArg->args)
-                    {
-                        if (m->type == NodeType::VarNode)
-                        {
-                            containsVar = true;
-                            // Var *vChildArg = dynamic_cast<Var *>(m);
-                            Var *vChildArg = static_cast<Var *>(m);
-                            if (std::find(seenVars.begin(), seenVars.end(), vChildArg->id) == seenVars.end())
-                            {
-                                seenVars.emplace_back(vChildArg->id);
-                                vOccurances[vChildArg->id]++;
-                            }
-                        }
-                    }
-                    if (!containsVar)
-                        doSkip[n] = true;
-                }
-            }
-
-            if (vOccurances.size() != 0)
-            {
-                std::string mostFreqVar = std::max_element(std::begin(vOccurances), std::end(vOccurances), [](const std::pair<std::string, int> &p1, const std::pair<std::string, int> &p2) { return p1.second < p2.second; })->first;
-                if (coeff.find(mostFreqVar) == coeff.end())
-                    coeff[mostFreqVar] = new Num(0.);
-
-                //------------------------------------- ITERATING THROUGH ARGUMENTS OF A CHILD NODE TO COLLECT THE MOST FREQUENTLY OCCURING VARIABLE -------------------------------------
-
-                for (Node *p : mSource->args)
-                {
-                    if (p->type != NodeType::MultiNode)
-                        continue;
-
-                    if (doSkip[p])
-                        continue;
-
-                    // Multi *mArg = dynamic_cast<Multi *>(p);
-                    Multi *mArg = static_cast<Multi *>(p);
-                    if (mArg->op != Operator::MUL)
-                        continue;
-
-                    std::vector<Node *> childCoeffs;
-                    std::vector<std::string> seenVars;
-                    Var *seenVar = nullptr;
-                    bool isSeenBefore = false;
-
-                    for (Node *q : mArg->args)
-                    {
-
-                        if (q->type != NodeType::VarNode)
-                            childCoeffs.emplace_back(q);
-                        else
-                        {
-                            // Var *vChildArg = dynamic_cast<Var *>(q);
-                            Var *vChildArg = static_cast<Var *>(q);
-
-                            // variable we have seen is not the most frequent variable
-                            if (vChildArg->id != mostFreqVar)
-                                childCoeffs.emplace_back(vChildArg);
-
-                            // variable we see is the most frequent variable
-                            else
-                            {
-                                if (isSeenBefore)
-                                    childCoeffs.emplace_back(vChildArg);
-                                else
-                                {
-                                    seenVar = vChildArg;
-                                    isSeenBefore = true;
-                                }
-                            }
-                        }
-                    }
-
-                    // std::cout << "Data in childCoeffs: " << std::endl;
-                    // for (Node *r : childCoeffs)
-                    //     std::cout << r->ToString() << std::endl;
-
-                    // std::cout << "seenVar: " << seenVar << std::endl;
-
-                    if (seenVar == nullptr)
-                        notVars.emplace_back(new Multi(childCoeffs, Operator::MUL));
+                    if (childCoeff.size() == 1)
+                        firstPassCoeffs[mostFreq] = new Multi(firstPassCoeffs[mostFreq], childCoeff[0], Operator::ADD);
                     else
-                    {
-                        Multi *child;
-                        if (childCoeffs.size() == 1)
-                            coeff[seenVar->id] = new Multi(coeff[seenVar->id], childCoeffs[0], Operator::ADD);
-                        else
-                        {
-                            child = new Multi(childCoeffs, Operator::MUL);
-                            coeff[seenVar->id] = new Multi(child, coeff[seenVar->id], Operator::ADD);
-                        }
-                    }
+                        firstPassCoeffs[mostFreq] = new Multi(firstPassCoeffs[mostFreq], new Multi(childCoeff, Operator::MUL), Operator::ADD);
                 }
             }
 
-            // std::cout << "Data in vOccurances: " << std::endl;
-            // for (auto &[var, num] : vOccurances)
-            //     std::cout << var << " " << num << std::endl;
+            std::cout << "data in nOccurances:" << std::endl;
+            for (auto &[key, val] : nOccurances)
+                std::cout << key->ToString() << " " << val << std::endl;
 
-            std::cout << "Data in notVar: " << std::endl;
-            for (Node *o : notVars)
-                std::cout << o->ToString() << std::endl;
+            std::cout << "data in firstPassCoeffs:" << std::endl;
+            for (auto &[val, coeff] : firstPassCoeffs)
+                std::cout << val->ToString() << " " << coeff->ToString() << std::endl;
 
-            std::cout << "Data in doSkip " << std::endl;
-            for (auto &[node, skip] : doSkip)
-            {
-                std::cout << node->ToString() << " " << skip << std::endl;
-            }
+            for (auto &[val, coeff] : firstPassCoeffs)
+                res->AddArg(new Multi(coeff, val, Operator::MUL));
+            for (Node *m : noFreq)
+                res->AddArg(m);
 
-            for (Node *n : mSource->args)
-            {
-                if (doSkip[n])
-                    notVars.emplace_back(n);
-            }
-            for (auto &[var, coefficient] : coeff)
-            {
-                notVars.emplace_back(new Multi(coefficient, new Var(var), Operator::MUL));
-            }
-            if (notVars.size() == 1)
-                return FoldConstants(notVars[0]);
+            if (res->args.size() == 1)
+                return FoldConstants(res->args[0]);
             else
-            {
-                return FoldConstants(new Multi(notVars, mSource->op));
-            }
+                return FoldConstants(res);
         }
-        return source;
     }
 
     Node *FoldMulVariables(Node *source)
     {
-        std::cout << "FoldMulVariables of: " << source->ToString() << std::endl;
+        // std::cout << "FoldMulVariables of: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
@@ -812,7 +761,7 @@ namespace Simplify
 
     Node *FoldVariables(Node *source)
     {
-        std::cout << "FoldVariables: " << source->ToString() << std::endl;
+        // std::cout << "FoldVariables: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
@@ -821,7 +770,7 @@ namespace Simplify
             Multi *mSource = static_cast<Multi *>(source);
             Node *folded;
             if (mSource->op == Operator::ADD)
-                folded = FoldAddVariables(mSource);
+                folded = SimplifyAddition(mSource);
             else
                 folded = FoldMulVariables(mSource);
 
@@ -841,7 +790,7 @@ namespace Simplify
 
     Node *SimplifySubtraction(Multi *source)
     {
-        std::cout << "SimplifySubtraction of: " << source->ToString() << std::endl;
+        // std::cout << "SimplifySubtraction of: " << source->ToString() << std::endl;
         if (source->op != Operator::SUB)
             return source;
 
@@ -1017,7 +966,7 @@ namespace Simplify
 
     Node *SimplifyDivision(Multi *source)
     {
-        std::cout << "SimplifyDivision of: " << source->ToString() << std::endl;
+        // std::cout << "SimplifyDivision of: " << source->ToString() << std::endl;
         if (source->op != Operator::DIV)
             return source;
 

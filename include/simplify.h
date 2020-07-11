@@ -61,7 +61,7 @@ namespace Simplify
    /*
       Simplifies expressions like 3*x + 2*x into 5*x
    */
-   Node *FoldAddVariables(Node *source);
+   Node *SimplifyAddition(Node *source);
 
    /*
       Simplifies expressions like x^2 * x^3 into x^5

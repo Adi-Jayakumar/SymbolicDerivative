@@ -32,7 +32,7 @@ bool operator==(const Node &lhs, const Node &rhs)
         case Operator::POW:
         {
             assert(mLHS->args.size() == 2 && mRHS->args.size() == 2);
-            return (mLHS->op != mRHS->op && mLHS->args[0] == mRHS->args[0]) && (mLHS->args[1] == mRHS->args[1]);
+            return (mLHS->op == mRHS->op) && (*mLHS->args[0] == *mRHS->args[0]) && (*mLHS->args[1] == *mRHS->args[1]);
         }
         // commutative operators
         case Operator::MUL:
@@ -85,7 +85,7 @@ bool operator==(const Node &lhs, const Node &rhs)
         default:
         {
             assert((mLHS->args.size() == 1) && (mRHS->args.size() == 1));
-            return (mLHS->op == mRHS->op) && (mLHS->args[0]->Equals(mRHS->args[0]));
+            return (mLHS->op == mRHS->op) && (*mLHS->args[0] == *mRHS->args[0]);
         }
         }
     }
@@ -117,16 +117,6 @@ Var::Var(std::string _id)
     type = NodeType::VarNode;
 }
 
-bool Num::Equals(Node *rhs)
-{
-    if (rhs->type == NodeType::NumNode)
-    {
-        // return dynamic_cast<Num *>(rhs)->val == val;
-        return static_cast<Num *>(rhs)->val == val;
-    }
-    return false;
-}
-
 std::string Var::ToString()
 {
     return SelfToString();
@@ -134,15 +124,6 @@ std::string Var::ToString()
 
 std::string Var::SelfToString() { return id; }
 
-bool Var::Equals(Node *rhs)
-{
-    if (rhs->type == NodeType::VarNode)
-    {
-        // return dynamic_cast<Var *>(rhs)->id == id;
-        return static_cast<Var *>(rhs)->id == id;
-    }
-    return false;
-}
 
 Multi::Multi(Operator _op)
 {
@@ -246,59 +227,4 @@ std::string Multi::SelfToString()
     else if (op == Operator::TAN)
         return "tan";
     return "";
-}
-
-bool Multi::Equals(Node *rhs)
-{
-    if (rhs->type == NodeType::MultiNode)
-    {
-        // Multi *r = dynamic_cast<Multi *>(rhs);
-        Multi *r = static_cast<Multi *>(rhs);
-
-        if (op != r->op)
-            return false;
-        switch (op)
-        {
-        // non commutative operators (cheap)
-        case Operator::SUB:
-        case Operator::DIV:
-        case Operator::POW:
-        {
-            assert(args.size() == 2 && r->args.size() == 2);
-            return (op != r->op && args[0] == r->args[0]) && (args[1] == r->args[1]);
-        }
-        // commutative operators (expensive)
-        case Operator::MUL:
-        case Operator::ADD:
-        {
-            if (args.size() != r->args.size() || op != r->op)
-                return false;
-
-            for (Node *n : args)
-            {
-                bool isContained = false;
-                for (Node *m : r->args)
-                {
-                    if (n->Equals(m))
-                    {
-                        isContained = true;
-                        break;
-                    }
-                    // std::cout << "RUNNING " << n->ToString() << " == " << m->ToString() << " Equality result " << isContained << std::endl;
-                }
-                if (!isContained)
-                    return false;
-            }
-            return true;
-        }
-        // only case left is functions (cheap)
-        default:
-        {
-            assert((args.size() == 1) && (r->args.size() == 1));
-            return (op == r->op) && (args[0]->Equals(r->args[0]));
-        }
-        }
-    }
-    else
-        return false;
 }
