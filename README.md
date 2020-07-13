@@ -3,9 +3,9 @@ Symbolic Derivative Calculator
 
 
 ## TODO 
- - [x] Multi node
- - [ ] Differentiation
- - [ ] Multi-Variables
+ - [x] MultiNode
+ - [x] Differentiation
+ - [x] Multi-Variables
 
 ## Longterm TODO
  - Custom function declaration

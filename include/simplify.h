@@ -30,27 +30,27 @@ namespace Simplify
     */
    Multi *Unroll(Multi *source);
 
-   Node *PowCanonicalForm(Multi *source);
+   Node *PowPreProcessed(Multi *source);
 
    /* 
       Simplfifies an UNROLLED Multi node of multiplications and divisions into
       a Multi node with one divide at the top and 2 children which are the
       numerators and denominators which are Multi nodes whose operation is multiplication.
     */
-   Node *MulCanonicalForm(Multi *source);
+   Node *MulPreProcessed(Multi *source);
 
    /* 
       Simplfifies an UNROLLED Multi node of additions and subtractions into a Multi
       node with one subtraction at the top and 2 children which are the additive
       and subtractive parts which are Multi nodes operation is addition
      */
-   Node *AddCanonicalForm(Multi *source);
+   Node *AddPreProcessed(Multi *source);
 
    /*
       Wrapper for MulCanonicalForm and AddCanonicalform and PowCanonicalForm (returns 
       the input if not a Multi node)
    */
-   Node *CanonicalForm(Node *source);
+   Node *PreProcessed(Node *source);
 
    /*
       Folds the constants in a Node (acts like an evaluator but preserves variables).
@@ -66,16 +66,8 @@ namespace Simplify
    /*
       Simplifies expressions like x^2 * x^3 into x^5
    */
-   Node *FoldMulVariables(Node *source);
+   Node *SimplifyMultiplication(Node *source);
 
-   /*
-      Wrapper for FoldAddVariables and FoldMulVariables
-   */
-   Node *FoldVariables(Node *source);
-
-   Node *FoldFunctions(Node *source);
-
-   // Nodes for these 2 are assumed to be in canonical form
    Node *SimplifySubtraction(Multi *source);
 
    Node *SimplifyDivision(Multi *source);
