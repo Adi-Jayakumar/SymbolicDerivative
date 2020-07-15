@@ -1,10 +1,4 @@
 #include "tokeniser.h"
-#include <iostream>
-#include <fstream>
-#include <unordered_map>
-
-using namespace std;
-
 
 Tokeniser::Tokeniser(std::string _file)
 {
@@ -29,8 +23,6 @@ void Tokeniser::Tokenise()
             {"cos", Token::COS},
             {"tan", Token::TAN}
         };
-    std::cout << expr
-              << endl;
     Token token = Token::EoF;
     std::string var = "";
     std::string func = "";

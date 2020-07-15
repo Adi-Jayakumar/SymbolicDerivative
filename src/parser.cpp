@@ -12,25 +12,34 @@ Node *Parser::Parse(int &i)
     {
         if (tk.tokens[i].t == Token::EoF || tk.tokens[i].t == Token::CP)
             return lhs;
+
         Token op = Token::EoF;
+
         if (tk.tokens[i].t == Token::ADD)
             op = Token::ADD;
         else if (tk.tokens[i].t == Token::SUB)
             op = Token::SUB;
+
         if (tk.tokens[i].t == Token::EoF || op == Token::EoF)
             return lhs;
+
         i++;
         Node *rhs = ParseMul(i);
-        lhs = new BinaryNode(lhs, rhs, op);
+        if (op == Token::SUB)
+            rhs = new Multi(new Num(-1), rhs, Utility::TokenToOperator(Token::MUL));
+
+        lhs = new Multi(lhs, rhs, Operator::ADD);
     }
 }
 
 Node *Parser::ParseMul(int &i)
 {
+
     Node *lhs = ParseInd(i);
     while (true)
     {
         Token op = Token::EoF;
+
         if (tk.tokens[i].t == Token::MUL)
             op = Token::MUL;
         else if (tk.tokens[i].t == Token::DIV)
@@ -38,9 +47,14 @@ Node *Parser::ParseMul(int &i)
 
         if (tk.tokens[i].t == Token::EoF || op == Token::EoF)
             return lhs;
+
         i++;
         Node *rhs = ParseInd(i);
-        lhs = new BinaryNode(lhs, rhs, op);
+
+        if (op == Token::DIV)
+            rhs = new Multi(new Num(1), rhs, Operator::DIV);
+
+        lhs = new Multi(lhs, rhs, Operator::MUL);
     }
 }
 
@@ -51,21 +65,19 @@ Node *Parser::ParseInd(int &i)
     {
         i++;
         Token op = Token::EoF;
+
         if (tk.tokens[i].t == Token::POW)
             op = Token::POW;
 
         if (tk.tokens[i].t == Token::EoF || op == Token::EoF)
             return lhs;
+
         i++;
-        Node *rhs = ParseUnit(i);
-        lhs = new BinaryNode(lhs, rhs, op);
+        Node* rhs = ParseUnit(i);
+        lhs = new Multi(lhs, rhs, Operator::POW);
     }
 }
 
-/*
-    Parses a unary node (only Var and Num), leaves the index 
-    on the node that was parsed
-*/
 Node *Parser::ParseUnit(int &i)
 {
     if (tk.tokens[i].t == Token::NUM)
@@ -78,7 +90,7 @@ Node *Parser::ParseUnit(int &i)
     else if (tk.tokens[i].t == Token::SUB)
     {
         i++;
-        return new Unary(ParseUnit(i), Token::SUB);
+        return new Multi(new Num(-1), ParseUnit(i), Operator::MUL);
     }
     else if (tk.tokens[i].t == Token::VAR)
         return new Var(tk.tokens[i].var);
@@ -92,9 +104,9 @@ Node *Parser::ParseUnit(int &i)
     }
     else if (tk.tokens[i].t == Token::LN || tk.tokens[i].t == Token::EXP || tk.tokens[i].t == Token::SIN || tk.tokens[i].t == Token::COS || tk.tokens[i].t == Token::TAN)
     {
-        Token f = tk.tokens[i].t;
+        Operator f = Utility::TokenToOperator(tk.tokens[i].t);
         i++;
-        return new Unary(ParseUnit(i), f);
+        return new Multi(ParseUnit(i), f);
     }
-        return new Num(0);
+    return new Num(0.);
 }

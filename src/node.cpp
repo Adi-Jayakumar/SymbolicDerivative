@@ -1,5 +1,97 @@
 #include "node.h"
-#include <cmath>
+
+bool operator==(const Node &lhs, const Node &rhs)
+{
+    if (lhs.type != rhs.type)
+        return false;
+
+    if (lhs.type == NodeType::NumNode)
+    {
+        const Num *nLHS = static_cast<const Num *>(&lhs);
+        const Num *nRHS = static_cast<const Num *>(&rhs);
+        return (nLHS->val == nRHS->val);
+    }
+    else if (lhs.type == NodeType::VarNode)
+    {
+        const Var *vLHS = static_cast<const Var *>(&lhs);
+        const Var *vRHS = static_cast<const Var *>(&rhs);
+        return (vLHS->id == vRHS->id);
+    }
+    else
+    {
+        const Multi *mLHS = static_cast<const Multi *>(&lhs);
+        const Multi *mRHS = static_cast<const Multi *>(&rhs);
+
+        if (mLHS->op != mRHS->op)
+            return false;
+        switch (mLHS->op)
+        {
+        // non-commutative operators
+        case Operator::SUB:
+        case Operator::DIV:
+        case Operator::POW:
+        {
+            assert(mLHS->args.size() == 2 && mRHS->args.size() == 2);
+            return (mLHS->op == mRHS->op) && (*mLHS->args[0] == *mRHS->args[0]) && (*mLHS->args[1] == *mRHS->args[1]);
+        }
+        // commutative operators
+        case Operator::MUL:
+        case Operator::ADD:
+        {
+            if (mLHS->args.size() != mRHS->args.size() || mLHS->op != mRHS->op)
+                return false;
+
+            std::unordered_map<Node *, bool> isLHSContained;
+            std::unordered_map<Node *, bool> isRHSContained;
+
+            for (Node *n : mLHS->args)
+            {
+                for (Node *m : mRHS->args)
+                {
+                    if (*n == *m && !isRHSContained[m])
+                    {
+                        isLHSContained[n] = true;
+                        isRHSContained[m] = true;
+                        break;
+                    }
+                }
+            }
+
+            // std::cout << "Data in isLHSContained " << std::endl;
+            // for (auto &[n, cont] : isLHSContained)
+            // {
+            //     std::cout << n->ToString() << " " << cont << std::endl;
+            // }
+
+            // std::cout << "Data in isRHSContained " << std::endl;
+            // for (auto &[n, cont] : isRHSContained)
+            // {
+            //     std::cout << n->ToString() << " " << cont << std::endl;
+            // }
+
+            for (Node *n : mLHS->args)
+            {
+                if (!isLHSContained[n])
+                    return false;
+            }
+            for (Node *n : mRHS->args)
+            {
+                if (!isRHSContained[n])
+                    return false;
+            }
+            return true;
+        }
+        // only case left is functions
+        default:
+        {
+            assert((mLHS->args.size() == 1) && (mRHS->args.size() == 1));
+            return (mLHS->op == mRHS->op) && (*mLHS->args[0] == *mRHS->args[0]);
+        }
+        }
+    }
+}
+
+Node::~Node() {}
 
 Num::Num(double _val)
 {
@@ -10,272 +102,129 @@ Num::Num(double _val)
         val = _val;
 }
 
-std::string Num::Print()
+std::string Num::ToString()
 {
     if (fabs(val - (int)val) < 1e-14)
         return std::to_string((int)val);
     return std::to_string(val);
 }
 
-Node *Num::Differentiate()
-{
-    return new Num(0);
-}
-
-Node *Num::Simplify()
-{
-    return this;
-}
+std::string Num::SelfToString() { return ToString(); }
 
 Var::Var(std::string _id)
 {
-    type = NodeType::VarNode;
     id = _id;
+    type = NodeType::VarNode;
 }
 
-std::string Var::Print()
+std::string Var::ToString()
 {
-    return id;
+    return SelfToString();
 }
 
-Node *Var::Differentiate()
-{
-    return new Num(1);
-}
+std::string Var::SelfToString() { return id; }
 
-Node *Var::Simplify()
-{
-    return this;
-}
 
-Unary::Unary(Node *_arg, Token _op)
+Multi::Multi(Operator _op)
 {
-    type = NodeType::UnaryNode;
-    arg = _arg;
     op = _op;
+    type = NodeType::MultiNode;
 }
 
-std::string Unary::Print()
+Multi::Multi(Node *arg, Operator _op)
 {
-    std::string s = "";
-    if (op == Token::ADD)
-        s += "+";
-    else if (op == Token::SUB)
-        s += "-";
-    else if (op == Token::LN)
-        s += "ln";
-    else if (op == Token::EXP)
-        s += "exp";
-    else if (op == Token::SIN)
-        s += "sin";
-    else if (op == Token::COS)
-        s += "cos";
-    else if (op == Token::TAN)
-        s += "tan";
-
-    s += arg->Print();
-    return s;
-}
-
-Node *Unary::Differentiate()
-{
-    if (op == Token::ADD)
-        return arg->Differentiate();
-    else if (op == Token::SUB)
-        return new Unary(arg->Differentiate(), Token::SUB);
-    else if (op == Token::LN)
-        return new BinaryNode(arg->Differentiate(), arg, Token::DIV);
-    else if (op == Token::EXP)
-        return new BinaryNode(arg->Differentiate(), new Unary(arg, Token::EXP), Token::MUL);
-    else if (op == Token::SIN)
-        return new BinaryNode(arg->Differentiate(), new Unary(arg, Token::COS), Token::MUL);
-    else if (op == Token::COS)
-        return new BinaryNode(arg->Differentiate(), new Unary(new Unary(arg, Token::SIN), Token::SUB), Token::MUL);
-    else if (op == Token::TAN)
-        return new BinaryNode(arg->Differentiate(), new BinaryNode(new Unary(arg, Token::COS), new Num(-2), Token::POW), Token::MUL);
-    return new Num(0);
-}
-
-Node *Unary::BaseArg()
-{
-    if (op != Token::ADD && op != Token::SUB)
-        return this;
-    if (arg->type != NodeType::UnaryNode)
-        return arg;
-    else
-    {
-        Unary *u = dynamic_cast<Unary *>(arg);
-        return u->BaseArg();
-    }
-}
-
-int Unary::Parity(int &p)
-{
-    if (arg->type != NodeType::UnaryNode)
-    {
-        if (op == Token::SUB)
-            p++;
-        return p;
-    }
-    else
-    {
-        Unary *u = dynamic_cast<Unary *>(arg);
-        if (op == Token::SUB)
-        {
-            p++;
-            return u->Parity(p);
-        }
-        else
-            return u->Parity(p);
-    }
-}
-
-Node *Unary::SimplifyNegations()
-{
-    int p = 0;
-    int parity = Parity(p);
-    if (parity % 2 == 0)
-        return BaseArg();
-    else
-        return new Unary(BaseArg(), Token::SUB);
-    return this;
-}
-
-Node *Unary::Simplify()
-{
-    if (op == Token::LN && arg->type == NodeType::NumNode)
-    {
-        Num *n = dynamic_cast<Num *>(arg);
-        if (fabs(n->val - 1) < 1e-14)
-            return new Num(0);
-    }
-
-    if ((op == Token::SIN || op == Token::TAN) && arg->type == NodeType::NumNode)
-    {
-        Num *n = dynamic_cast<Num *>(arg);
-        if (fabs(n->val) < 1e-14)
-            return new Num(0);
-    }
-
-    return SimplifyNegations();
-}
-
-BinaryNode::BinaryNode(Node *_lhs, Node *_rhs, Token _op)
-{
-    type = NodeType::Binary;
-    lhs = _lhs;
-    rhs = _rhs;
     op = _op;
+    args.emplace_back(arg);
+    type = NodeType::MultiNode;
 }
 
-std::string BinaryNode::Print()
+Multi::Multi(Node *_lhs, Node *_rhs, Operator _op)
+{
+    op = _op;
+    args.emplace_back(_lhs);
+    args.emplace_back(_rhs);
+    type = NodeType::MultiNode;
+}
+
+Multi::Multi(std::vector<Node *> _args, Operator _op)
+{
+    args = _args;
+    op = _op;
+    type = NodeType::MultiNode;
+}
+
+Multi::~Multi()
+{
+    for (size_t i = 0; i < args.size(); i++)
+    {
+        delete args[i];
+    }
+    args.clear();
+}
+
+void Multi::AddArg(Node *a)
+{
+    args.emplace_back(a);
+}
+
+std::string Multi::ToString()
 {
     std::string s = "(";
-    s += lhs->Print() + " ";
-    if (op == Token::ADD)
-        s += "+";
-    else if (op == Token::SUB)
-        s += "-";
-    else if (op == Token::MUL)
-        s += "*";
-    else if (op == Token::DIV)
-        s += "/";
-    else if (op == Token::POW)
-        s += "^";
-    else if (op == Token::OP)
-        s += "(";
-    else if (op == Token::CP)
-        s += ")";
-    // else
-    //     s += std::to_string(op);
-
-    s += " " + rhs->Print() + ")";
-
+    for (long unsigned int i = 0; i < args.size(); ++i)
+    {
+        if (i != 0)
+        {
+            if (op == Operator::ADD)
+                s += " + ";
+            else if (op == Operator::SUB)
+                s += " - ";
+            else if (op == Operator::MUL)
+                s += " * ";
+            else if (op == Operator::DIV)
+                s += " / ";
+            else if (op == Operator::POW)
+                s += " ^ ";
+        }
+        else
+        {
+            if (op == Operator::LN)
+                s += "ln";
+            else if (op == Operator::EXP)
+                s += "exp";
+            else if (op == Operator::SIN)
+                s += "sin";
+            else if (op == Operator::COS)
+                s += "cos";
+            else if (op == Operator::TAN)
+                s += "tan";
+        }
+        s += args[i]->ToString();
+    }
+    s += ")";
     return s;
 }
 
-Node *BinaryNode::Differentiate()
+std::string Multi::SelfToString()
 {
-    // (f +- g)' = f' +- g'
-    if (op == Token::ADD || op == Token::SUB)
-        return new BinaryNode(lhs->Differentiate(), rhs->Differentiate(), op);
-
-    // (fg)' = f'g + g'f
-    else if (op == Token::MUL)
-        return new BinaryNode(new BinaryNode(lhs->Differentiate(), rhs, Token::MUL), new BinaryNode(lhs, rhs->Differentiate(), Token::MUL), Token::ADD);
-
-    // (f/g)' = (f'g-g'f)/g*g
-    else if (op == Token::DIV)
-        return new BinaryNode(new BinaryNode(new BinaryNode(lhs->Differentiate(), rhs, Token::MUL), new BinaryNode(rhs->Differentiate(), lhs, Token::MUL), Token::SUB), new BinaryNode(rhs, rhs, Token::MUL), Token::DIV);
-
-    // (f^g)' = (e^(f*ln(g)))' = ... = f^g * (f'*ln(g) + f*g'/g)
-    else if (op == Token::POW)
-        return new BinaryNode(new BinaryNode(lhs, rhs, Token::POW), new BinaryNode(new BinaryNode(rhs->Differentiate(), new Unary(lhs, Token::LN), Token::MUL), new BinaryNode(new BinaryNode(lhs->Differentiate(), rhs, Token::MUL), lhs, Token::DIV), Token::ADD), Token::MUL);
-    return new Num(0);
-}
-
-Node *BinaryNode::Simplify()
-{
-    if (lhs->type == NodeType::NumNode)
-    {
-        Num *l = dynamic_cast<Num *>(lhs);
-        if (fabs(l->val - 1) < 1e-14)
-        {
-            // case: 1 * (...) = (...)
-            if (op == Token::MUL)
-                return rhs;
-        }
-        else if (fabs(l->val) < 1e-14)
-        {
-            // case: 0 * (...) = 0
-            if (op == Token::MUL)
-                return new Num(0);
-            // case: 0 + (...) = (...)
-            if (op == Token::ADD)
-                return rhs;
-        }
-    }
-    if (rhs->type == NodeType::NumNode)
-    {
-        Num *r = dynamic_cast<Num *>(rhs);
-        if (fabs(r->val - 1) < 1e-14)
-        {
-            // case: (...) * 1 = (...)
-            if (op == Token::MUL)
-                return lhs;
-        }
-        else if (fabs(r->val) < 1e-14)
-        {
-            // case: (...) * 0 = 0
-            if (op == Token::MUL)
-                return new Num(0);
-            // case: (...) + 0 = (...)
-            if (op == Token::ADD)
-                return lhs;
-        }
-    }
-    if (lhs->type == NodeType::NumNode && rhs->type == NodeType::NumNode)
-    {
-        Num *l = dynamic_cast<Num *>(lhs);
-        Num *r = dynamic_cast<Num *>(rhs);
-        if (op == Token::ADD)
-            return new Num(l->val + r->val);
-        else if (op == Token::SUB)
-            return new Num(l->val - r->val);
-        else if (op == Token::MUL)
-            return new Num(l->val * r->val);
-        else if (op == Token::DIV)
-            return new Num(l->val / r->val);
-        else if (op == Token::POW)
-            return new Num(pow(l->val, r->val));
-    }
-
-    if (lhs->type == NodeType::VarNode && rhs->type == NodeType::NumNode)
-    {
-        Num* n = dynamic_cast<Num*>(rhs);
-        if(fabs(n->val - 1) < 1e-14)
-            return lhs;
-    }
-
-    return new BinaryNode(lhs->Simplify(), rhs->Simplify(), op);
+    if (op == Operator::ADD)
+        return "+";
+    else if (op == Operator::SUB)
+        return " - ";
+    else if (op == Operator::MUL)
+        return "*";
+    else if (op == Operator::DIV)
+        return "/";
+    else if (op == Operator::POW)
+        return "^";
+    if (op == Operator::LN)
+        return "ln";
+    else if (op == Operator::EXP)
+        return "exp";
+    else if (op == Operator::SIN)
+        return "sin";
+    else if (op == Operator::COS)
+        return "cos";
+    else if (op == Operator::TAN)
+        return "tan";
+    return "";
 }
