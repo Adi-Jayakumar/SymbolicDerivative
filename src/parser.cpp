@@ -5,7 +5,12 @@ Parser::Parser(std::string _file)
     tk = Tokeniser(_file);
 }
 
-Node *Parser::Parse(int &i)
+Node *Parser::Parse(int i)
+{
+    return ParseAdd(i);
+}
+
+Node *Parser::ParseAdd(int &i)
 {
     Node *lhs = ParseMul(i);
     while (true)
@@ -97,7 +102,7 @@ Node *Parser::ParseUnit(int &i)
     else if (tk.tokens[i].t == Token::OP)
     {
         i++;
-        Node *brackets = Parse(i);
+        Node *brackets = ParseAdd(i);
         if (tk.tokens[i].t != Token::CP)
             throw std::invalid_argument("Missing close parenthesis");
         return brackets;

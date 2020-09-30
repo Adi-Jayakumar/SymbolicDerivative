@@ -3,9 +3,25 @@
 namespace Simplify
 {
 
+    Node *Reduce(Node *source)
+    {
+
+        Node *res = nullptr;
+
+        while (true)
+        {
+            res = Simplify(source);
+            if (*res == *source)
+                break;
+            else
+                source = res;
+        }
+
+        return res;
+    }
+
     Node *Simplify(Node *source)
     {
-        // std::cout << "Simplify " << source->ToString() << std::endl;
 
         // no simplifications can be done to a number/variable
         if (source->type == NodeType::NumNode || source->type == NodeType::VarNode)
@@ -17,28 +33,24 @@ namespace Simplify
             Multi *mSource = static_cast<Multi *>(source);
 
             Multi *unrolled = Unroll(mSource);
-            std::cout << "Unrolled: " << unrolled->ToString() << std::endl;
-
             Node *noConstants = FoldConstants(unrolled);
-            std::cout << "constants folded: " << noConstants->ToString() << std::endl;
+            Node *preProc = PreProcessed(noConstants);
 
-            Node* preProc = PreProcessed(noConstants);
-            if(preProc->type != NodeType::MultiNode)
+            if (preProc->type != NodeType::MultiNode)
                 return preProc;
             else
             {
-                Multi* mPreProc = static_cast<Multi*>(preProc);
-                if(mPreProc->op == Operator::ADD)
+                Multi *mPreProc = static_cast<Multi *>(preProc);
+                if (mPreProc->op == Operator::ADD)
                     return SimplifyNodeByNode(SimplifyAddition(mPreProc));
-                else if(mPreProc->op == Operator::SUB)
+                else if (mPreProc->op == Operator::SUB)
                     return SimplifyNodeByNode(SimplifySubtraction(mPreProc));
-                else if(mPreProc->op == Operator::MUL)
+                else if (mPreProc->op == Operator::MUL)
                     return SimplifyNodeByNode(SimplifyMultiplication(mPreProc));
-                else if(mPreProc->op == Operator::DIV)
+                else if (mPreProc->op == Operator::DIV)
                     return SimplifyNodeByNode(SimplifyDivision(mPreProc));
                 else
                     return SimplifyNodeByNode(preProc);
-
             }
         }
     }
@@ -61,7 +73,6 @@ namespace Simplify
 
     Multi *Unroll(Multi *source)
     {
-        // std::cout << "Unroll: " << source->ToString() << " With op: " << static_cast<int>(source->op) << std::endl;
         if (source->op == Operator::POW)
             return source;
         else if (IsFunc(source))
@@ -146,7 +157,6 @@ namespace Simplify
                 unrolled->AddArg(n);
             else
             {
-                // Multi *mArg = dynamic_cast<Multi *>(n);
                 Multi *mArg = static_cast<Multi *>(n);
                 if (mArg->op != source->op)
                     unrolled->AddArg(Unroll(mArg));
@@ -170,7 +180,6 @@ namespace Simplify
             assert(source->args.size() == 2);
             if (source->args[0]->type == NodeType::MultiNode)
             {
-                // Multi *mChildArg = dynamic_cast<Multi *>(source->args[0]);
                 Multi *mChildArg = static_cast<Multi *>(source->args[0]);
 
                 if (mChildArg->op == Operator::MUL)
@@ -199,7 +208,6 @@ namespace Simplify
                 numerator->AddArg(n);
             else
             {
-                // Multi *mArg = dynamic_cast<Multi *>(n);
                 Multi *mArg = static_cast<Multi *>(n);
                 Node *preProc = PreProcessed(mArg);
                 if (preProc->type != NodeType::MultiNode)
@@ -207,7 +215,6 @@ namespace Simplify
                     numerator->AddArg(preProc);
                     continue;
                 }
-                // mArg = dynamic_cast<Multi *>(preProc);
                 mArg = static_cast<Multi *>(preProc);
                 if (mArg->op != Operator::DIV)
                     numerator->AddArg(mArg);
@@ -283,7 +290,6 @@ namespace Simplify
                 additive->AddArg(n);
             else
             {
-                // Multi *mArg = dynamic_cast<Multi *>(n);
                 Multi *mArg = static_cast<Multi *>(n);
                 if (mArg->op != Operator::MUL)
                     additive->AddArg(mArg);
@@ -297,7 +303,6 @@ namespace Simplify
                             nonNeg->AddArg(m);
                         else
                         {
-                            // Num *num = dynamic_cast<Num *>(m);
                             Num *num = static_cast<Num *>(m);
                             if (num->val == -1)
                                 isNeg = !isNeg;
@@ -364,19 +369,17 @@ namespace Simplify
 
     Node *PreProcessed(Node *source)
     {
-        // std::cout << "preProcForm of: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
         {
-            // Multi *mSource = dynamic_cast<Multi *>(source);
             Multi *mSource = static_cast<Multi *>(source);
             if (mSource->op == Operator::MUL)
                 return MulPreProcessed(mSource);
             else if (mSource->op == Operator::ADD)
-                return PreProcessed(mSource);
+                return AddPreProcessed(mSource);
             else if (mSource->op == Operator::POW)
-                return PreProcessed(mSource);
+                return PowPreProcessed(mSource);
             else
             {
                 Multi *res = new Multi(mSource->op);
@@ -389,12 +392,10 @@ namespace Simplify
 
     Node *FoldConstants(Node *source)
     {
-        // std::cout << "Fold constants of: " << source->ToString() << std::endl;
         if (source->type != NodeType::MultiNode)
             return source;
         else
         {
-            // Multi *mSource = dynamic_cast<Multi *>(source);
             Multi *mSource = static_cast<Multi *>(source);
             if (mSource->op == Operator::ADD || mSource->op == Operator::MUL)
             {
@@ -406,7 +407,6 @@ namespace Simplify
                     Node *eval = FoldConstants(n);
                     if (eval->type == NodeType::NumNode)
                     {
-                        // Num *nEval = dynamic_cast<Num *>(eval);
                         Num *nEval = static_cast<Num *>(eval);
                         if (mSource->op == Operator::ADD)
                             val += nEval->val;
@@ -438,9 +438,7 @@ namespace Simplify
                 Node *invOperand = FoldConstants(mSource->args[1]);
                 if (operand->type == NodeType::NumNode && invOperand->type == NodeType::NumNode)
                 {
-                    // Num *nNum = dynamic_cast<Num *>(operand);
                     Num *nNum = static_cast<Num *>(operand);
-                    // Num *nDenom = dynamic_cast<Num *>(invOperand);
                     Num *nDenom = static_cast<Num *>(invOperand);
                     if (mSource->op == Operator::SUB)
                         return new Num(nNum->val - nDenom->val);
@@ -469,7 +467,6 @@ namespace Simplify
                     return new Multi(simpArg, mSource->op);
                 else
                 {
-                    // Num *nArg = dynamic_cast<Num *>(simpArg);
                     Num *nArg = static_cast<Num *>(simpArg);
                     switch (mSource->op)
                     {
@@ -501,9 +498,7 @@ namespace Simplify
                 Node *power = FoldConstants(mSource->args[1]);
                 if (base->type == NodeType::NumNode && power->type == NodeType::NumNode)
                 {
-                    // Num *nBase = dynamic_cast<Num *>(base);
                     Num *nBase = static_cast<Num *>(base);
-                    // Num *nPower = dynamic_cast<Num *>(power);
                     Num *nPower = static_cast<Num *>(power);
                     return new Num(pow(nBase->val, nPower->val));
                 }
@@ -570,10 +565,6 @@ namespace Simplify
                     firstPassCoeffs[n] = new Num(1);
             }
 
-            // std::cout << "data in firstPassCoeffs after the first pass:" << std::endl;
-            // for (auto &[val, coeff] : firstPassCoeffs)
-            //     std::cout << val->ToString() << " " << coeff->ToString() << std::endl;
-
             std::map<Node *, int> nOccurances;
             //------------------------------------------ COUNTING OCCURANCES OF NON-NUMBER NODES ------------------------------------------
             for (Multi *mArg : notVisited)
@@ -606,7 +597,6 @@ namespace Simplify
             }
 
             Node *mostFreq = std::max_element(std::begin(nOccurances), std::end(nOccurances), [](const std::pair<Node *, int> &p1, const std::pair<Node *, int> &p2) { return p1.second < p2.second; })->first;
-            // std::cout << "mostFreq: " << mostFreq->ToString() << std::endl;
             if (firstPassCoeffs.find(mostFreq) == firstPassCoeffs.end())
                 firstPassCoeffs[mostFreq] = new Num(0.);
 
@@ -635,14 +625,6 @@ namespace Simplify
                         firstPassCoeffs[mostFreq] = new Multi(firstPassCoeffs[mostFreq], new Multi(childCoeff, Operator::MUL), Operator::ADD);
                 }
             }
-
-            // std::cout << "data in nOccurances:" << std::endl;
-            // for (auto &[key, val] : nOccurances)
-            //     std::cout << key->ToString() << " " << val << std::endl;
-
-            // std::cout << "data in firstPassCoeffs:" << std::endl;
-            // for (auto &[val, coeff] : firstPassCoeffs)
-            //     std::cout << val->ToString() << " " << coeff->ToString() << std::endl;
 
             for (auto &[val, coeff] : firstPassCoeffs)
                 res->AddArg(new Multi(coeff, val, Operator::MUL));
@@ -699,14 +681,6 @@ namespace Simplify
                     firstPassCoeffs[n] = new Num(1);
             }
 
-            // std::cout << "data in firstPassCoeffs after the first pass:" << std::endl;
-            // for (auto &[val, coeff] : firstPassCoeffs)
-            //     std::cout << val->ToString() << " " << coeff->ToString() << std::endl;
-
-            // std::cout << "data in notVisited: " << std::endl;
-            // for(Multi* m : notVisited)
-            //     std::cout << m->ToString() << std::endl;
-
             for (Multi *pow : notVisited)
             {
                 assert(pow->args.size() == 2 && pow->op == Operator::POW);
@@ -738,7 +712,6 @@ namespace Simplify
 
     Node *SimplifySubtraction(Multi *source)
     {
-        // std::cout << "SimplifySubtraction of: " << source->ToString() << std::endl;
         if (source->op != Operator::SUB)
             return source;
 
@@ -871,14 +844,6 @@ namespace Simplify
                     }
                 }
 
-                // std::cout << "Data in isAddConsumed: " << std::endl;
-                // for (auto &[n, b] : isAddConsumed)
-                //     std::cout << n->ToString() << " " << b << std::endl;
-
-                // std::cout << "Data in isSubConsumed: " << std::endl;
-                // for (auto &[n, b] : isSubConsumed)
-                //     std::cout << n->ToString() << " " << b << std::endl;
-
                 for (Node *p : add->args)
                 {
                     if (!isAddConsumed[p])
@@ -914,7 +879,6 @@ namespace Simplify
 
     Node *SimplifyDivision(Multi *source)
     {
-        // std::cout << "SimplifyDivision of: " << source->ToString() << std::endl;
         if (source->op != Operator::DIV)
             return source;
 
@@ -978,7 +942,6 @@ namespace Simplify
 
             for (Multi *p : seenPowers)
             {
-                // std::cout << "mArg " << p->ToString() << std::endl;
                 if (*p->args[0] == *notM && !isConsumed)
                 {
                     isConsumed = true;
@@ -1036,8 +999,6 @@ namespace Simplify
                     func = denom;
                     notFunc = num;
                 }
-                // std::cout << "func: " << func->ToString() << std::endl;
-                // std::cout << "notFunc: " << notFunc->ToString() << std::endl;
 
                 if (notFunc->op != Operator::POW && notFunc->op != Operator::MUL)
                     return source;
@@ -1142,9 +1103,6 @@ namespace Simplify
                     }
                 }
 
-                // if (num->op != Operator::MUL || denom->op != Operator::MUL)
-                //     return source;
-
                 // neither of them are powers
                 for (Node *n : num->args)
                 {
@@ -1180,22 +1138,6 @@ namespace Simplify
                     }
                 }
 
-                // std::cout << "Data in isNumConsumed: " << std::endl;
-                // for (auto &[n, b] : isNumConsumed)
-                //     std::cout << n->ToString() << " " << b << std::endl;
-
-                // std::cout << "Data in isDenomConsumed: " << std::endl;
-                // for (auto &[n, b] : isDenomConsumed)
-                //     std::cout << n->ToString() << " " << b << std::endl;
-
-                // std::cout << "Data in seenNumPowers" << std::endl;
-                // for (Multi *m : seenNumPowers)
-                //     std::cout << m->ToString() << std::endl;
-
-                // std::cout << "Data in seenDenomPowers" << std::endl;
-                // for (Multi *m : seenDenomPowers)
-                //     std::cout << m->ToString() << std::endl;
-
                 for (Multi *numPow : seenNumPowers)
                 {
                     for (Multi *denomPow : seenDenomPowers)
@@ -1224,7 +1166,6 @@ namespace Simplify
                     {
                         if (*denomPow->args[0] == *n && !isNumConsumed[n] && !isDenomConsumed[denomPow])
                         {
-                            // std::cout << "RUNNING" << std::endl;
                             simpDenom->AddArg(new Multi(n, new Multi(denomPow->args[1], new Num(1), Operator::SUB), Operator::POW));
                             isNumConsumed[n] = true;
                             isDenomConsumed[denomPow] = true;
@@ -1275,4 +1216,5 @@ namespace Simplify
     {
         return (source->op != Operator::ADD && source->op != Operator::SUB && source->op != Operator::MUL && source->op != Operator::DIV && source->op != Operator::POW);
     }
+
 } // namespace Simplify

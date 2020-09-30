@@ -57,18 +57,6 @@ bool operator==(const Node &lhs, const Node &rhs)
                 }
             }
 
-            // std::cout << "Data in isLHSContained " << std::endl;
-            // for (auto &[n, cont] : isLHSContained)
-            // {
-            //     std::cout << n->ToString() << " " << cont << std::endl;
-            // }
-
-            // std::cout << "Data in isRHSContained " << std::endl;
-            // for (auto &[n, cont] : isRHSContained)
-            // {
-            //     std::cout << n->ToString() << " " << cont << std::endl;
-            // }
-
             for (Node *n : mLHS->args)
             {
                 if (!isLHSContained[n])
@@ -119,10 +107,10 @@ Var::Var(std::string _id)
 
 std::string Var::ToString()
 {
-    return SelfToString();
+    return id;
 }
 
-std::string Var::SelfToString() { return id; }
+std::string Var::SelfToString() {return ToString();}
 
 
 Multi::Multi(Operator _op)

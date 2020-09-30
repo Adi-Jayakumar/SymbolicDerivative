@@ -87,12 +87,6 @@ void Tokeniser::Tokenise()
         else if (expr[i] == ')')
             token = Token::CP;
 
-        // std::cout << token << " " << value << " " << var << endl;
-        // if (token == FUNC)
-        // {
-        //     tokens.emplace_back(Unit(token, "", 0, func));
-        //     continue;
-        // }
         if (token == Token::VAR)
         {
             tokens.emplace_back(Unit(token, var, 0, ""));

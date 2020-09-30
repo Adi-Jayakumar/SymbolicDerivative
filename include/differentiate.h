@@ -6,7 +6,7 @@
 namespace Differentiate
 {
 
-    Node *Differentiate(Node *source, std::string s);
+    Node *Differentiate(Node *source, std::string s); // wrapper for Derivative
     Node *Derivative(Node *source, std::string &s);
 
 } // namespace Differentiate
