@@ -9,5 +9,4 @@ Symbolic Derivative Calculator
 
 ## Longterm TODO
  - Custom function declaration
- - Fucntion evaluation
  - Summation/Product notation
